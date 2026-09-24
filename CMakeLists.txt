@@ -15,5 +15,5 @@ add_subdirectory(dlopen)
 add_executable(launcher main.cpp)
 
 target_compile_definitions(launcher PRIVATE
-    DLOPEN_NAME="$<TARGET_FILE_NAME:dlopen>"
+    DLOPEN_NAME="$<TARGET_FILE_NAME:dlopen_runner>"
 )

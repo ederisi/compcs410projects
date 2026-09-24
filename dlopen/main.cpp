@@ -51,7 +51,7 @@ int main() {
         }
         
         // erase spaces
-        input.erase(' ');
+        input.erase(std::remove(input.begin(), input.end(), ' '), input.end());
         
 
         std::stack<double> num_stack;
@@ -64,7 +64,7 @@ int main() {
 
             // Check if the current character is an operand
             if ( c == '+' || c == '-' || c == '*' || c == '/') {
-                while (!op_stack.empty() && precedence(op_stack.top() >= precedence(c))) {
+                while (!op_stack.empty() && precedence(op_stack.top()) >= precedence(c)) {
                     applyTopOp(num_stack, op_stack);
                 }
                 op_stack.push(c);
@@ -72,7 +72,7 @@ int main() {
             }
 
             // Check if the current character starts a number (digital or decimal) and parse
-            else if (std::isdigit(c) || (c == '.' & i+1 < input.size() && std::isdigit(input[i+1]))) {
+            else if (std::isdigit(c) || (c == '.' && i+1 < input.size() && std::isdigit(input[i+1]))) {
                 std::string num_str = "";
 
                 // Combine all consecutive digits and decimal points

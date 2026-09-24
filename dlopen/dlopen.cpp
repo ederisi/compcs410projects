@@ -5,9 +5,9 @@
 
 typedef double (*MathOpFunc)(double, double);
 
-inline double calculate(double a, double b, Operand operand) {
+double DLOPEN::calculate(double a, double b, Operand operand) {
     // Open linked library from relative path
-    void* handle = dlopen("./build/libmathlib.so", RTLD_LAZY);
+    void* handle = dlopen("./libmathlib.so", RTLD_LAZY);
     if (!handle) {
         std::cerr <<"Error running library: " << dlerror() << "\n";
         return NAN; 
