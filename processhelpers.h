@@ -104,16 +104,16 @@ namespace ProcessHelpers
         return 0;
     }
 
-    void reap_services(std::unordered_map<std::string, pid_t>& running_services) {
-        for (auto it = running_services.begin();
-            it != running_services.end();) {
+    void reap_services(std::unordered_map<std::string, pid_t>& services) {
+        for (auto it = services.begin();
+            it != services.end();) {
             int status = 0;
             pid_t result = waitpid(it->second, &status, WNOHANG);
 
             if (result == it->second ||
                 (result < 0 && errno == ECHILD)) {
                 std::cout << it->first << " exited\n";
-                it = running_services.erase(it);
+                it = services.erase(it);
             } else {
                 ++it;
             }
@@ -126,6 +126,30 @@ namespace ProcessHelpers
             std::perror("kill");
 
         while (waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {
+        }
+    }
+
+    void stop_services(std::unordered_map<std::string, pid_t>& services) {
+        // Signal every tracked service before waiting for any of them.
+        for (const auto& [name, pid] : services) {
+            if (kill(-pid, SIGTERM) < 0 && errno != ESRCH)
+                std::perror("kill(SIGTERM)");
+
+            // Allow a stopped service to process termination.
+            if (kill(-pid, SIGCONT) < 0 && errno != ESRCH)
+                std::perror("kill(SIGCONT)");
+        }
+
+        for (const auto& [name, pid] : services) {
+            pid_t result;
+            do {
+                result = waitpid(pid, nullptr, 0);
+            } while (result < 0 && errno == EINTR);
+
+            if (result < 0 && errno != ECHILD)
+                std::perror("waitpid(service)");
+
+            std::cout << "Stopped " << name << '\n';
         }
     }
 }
