@@ -15,26 +15,28 @@ int precedence(char op) {
 
 // Convert operator character to dlopen.h Operand enum
 bool getOperandEnum(char op, Operand& out_op) {
-    case '+': out_op = ADD; return true;
-    case '-': out_op = SUBTRACT; return true;
-    case '*': out_op = MULTIPLY; return true;
-    case '/': out_op = DIVIDE; return true;
-    default: return false:
+    switch (op) {
+        case '+': out_op = ADD; return true;
+        case '-': out_op = SUBTRACT; return true;
+        case '*': out_op = MULTIPLY; return true;
+        case '/': out_op = DIVIDE; return true;
+        default: return false;
+    }
 }
 
 void applyTopOp(std::stack<double>& num_stack, std::stack<char>& op_stack) {
     // get right and left side numbers and operand
     double right = num_stack.top(); num_stack.pop();
     double left = num_stack.top(); num_stack.pop();
-    char op_char = op_stack.top() op_stack.pop();
+    char op_char = op_stack.top(); op_stack.pop();
     
     Operand op_enum;
-    if (getOoperandEnum(op_char, op_enum)) {
-        double result = calculate(left, right, op_enum);
+    if (getOperandEnum(op_char, op_enum)) {
+        double result = DLOPEN::calculate(left, right, op_enum);
         num_stack.push(result);    
     } else {
         std::cerr << "Unknown operator: " << op_char << '\n';
-        num_stack.push(0,0);
+        num_stack.push(0);
     }
 }
 
@@ -49,7 +51,7 @@ int main() {
         }
         
         // erase spaces
-        std::erase(input, ' ');
+        input.erase(' ');
         
 
         std::stack<double> num_stack;
