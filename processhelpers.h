@@ -17,6 +17,7 @@ struct Process {
     bool cli;
 };
 
+
 namespace ProcessHelpers 
 {
     pid_t spawn(const std::string& name, const Process& process) {
@@ -46,8 +47,6 @@ namespace ProcessHelpers
                     _exit(127);
                 }
                 close(fd);
-
-                // TODO: Redirect stdout/stderr to logs if they disrupt the CLI.
             }
 
             execl(process.executable.c_str(),
@@ -97,7 +96,7 @@ namespace ProcessHelpers
         }
 
         if (WIFSIGNALED(status)) {
-            std::cout << name << " ended on signal "
+            std::cout << '\n' << name << " ended on signal "
                     << WTERMSIG(status) << '\n';
         }
 

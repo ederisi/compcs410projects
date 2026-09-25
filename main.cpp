@@ -10,12 +10,11 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <csignal>
 
 static const std::vector<std::pair<std::string, Process>> PROCESS_REGISTRY = {
     {"dlopen", {"dlopen", true}}
 };
-
-std::unordered_map<std::string, pid_t> running_services; 
 
 const Process* find_process(const std::string& name) {
     for (const auto& entry : PROCESS_REGISTRY) {
@@ -25,14 +24,29 @@ const Process* find_process(const std::string& name) {
     return nullptr;
 }
 
+volatile std::sig_atomic_t exit_requested = 0; 
+extern "C" void sigint_handler(int) {
+    exit_requested = 1;
+}
+
 int main(int argc, char* argv[]) {
+    // Install SIGING handler
+    struct sigaction action {};
+    action.sa_handler = sigint_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0; 
+    if (sigaction(SIGINT, &action, nullptr) == -1) {
+        std::perror("sigaction");
+        return 1;
+    }
+
     if (std::signal(SIGTTOU, SIG_IGN) == SIG_ERR) {
         std::perror("signal");
         return 1;
     }
 
+    std::unordered_map<std::string, pid_t> running_services; // Track running services
     pid_t launcher_group = getpgrp();
-    int exit_code = 0;
 
     // If arguments were given, run the requested processes first
     if (argc > 1) {
@@ -81,7 +95,7 @@ int main(int argc, char* argv[]) {
 
             if (pid < 0) {
                 std::cerr << "Failed running service: " << name << '\n';
-                exit_code = 1;
+                exit_requested = 1;
                 break;
             }
 
@@ -89,33 +103,42 @@ int main(int argc, char* argv[]) {
         }
 
         // Run CLIs sequentially. 
-        if (exit_code == 0) {
+        if (!exit_requested) {
             for (const auto& [name, process] : requested) {
                 if (!process->cli)
                     continue;
 
-                if (ProcessHelpers::run_process(
-                        name, *process, launcher_group) < 0) {
+                if (ProcessHelpers::run_process(name, *process, launcher_group) < 0) {
                     std::cerr << "Failure running CLI: " << name << '\n';
-                    exit_code = 1;
+                    exit_requested = 1;
                     break;
                 }
             }
         }
     }
 
-    // Run launcher cli (proceeds to cleanup on exit_code != 0)
+    // Run main launcher cli
     std::string line;
-    while (exit_code == 0) {
+    while (!exit_requested) {
         ProcessHelpers::reap_services(running_services);
+
+        if (exit_requested)
+            break;
+
         std::cout << "launcher> " << std::flush;
 
         if (!std::getline(std::cin, line))
             break;
 
+        if (exit_requested)
+            break;
+
         std::istringstream input(line);
         std::string command;
         input >> command;
+
+        if (exit_requested)
+            break; 
 
         if (command.empty())
             continue;
@@ -175,8 +198,7 @@ int main(int argc, char* argv[]) {
                         break;
                     }
 
-                    for (const auto& [registered_name, definition]
-                         : PROCESS_REGISTRY) {
+                    for (const auto& [registered_name, definition] : PROCESS_REGISTRY) {
                         requested.emplace_back(registered_name, &definition);
                     }
                     break;
@@ -200,8 +222,7 @@ int main(int argc, char* argv[]) {
 
                     ProcessHelpers::reap_services(running_services);
 
-                    if (running_services.find(requested_name) !=
-                        running_services.end()) {
+                    if (running_services.find(requested_name) != running_services.end()) {
                         std::cout << requested_name << " is already running\n";
                         continue;
                     }
@@ -226,8 +247,7 @@ int main(int argc, char* argv[]) {
                     if (!process->cli)
                         continue;
 
-                    if (ProcessHelpers::run_process(
-                            requested_name, *process, launcher_group) < 0) {
+                    if (ProcessHelpers::run_process(requested_name, *process, launcher_group) < 0) {
                         std::cerr << "Failure running CLI: "
                                 << requested_name << '\n';
                         break; 
@@ -241,6 +261,7 @@ int main(int argc, char* argv[]) {
     }
 
     ProcessHelpers::stop_services(running_services);
+    std::cout << "Launcher exited\n";
 
-    return exit_code;
+    return 0;
 }
