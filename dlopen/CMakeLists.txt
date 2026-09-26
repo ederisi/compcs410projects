@@ -22,4 +22,11 @@ target_compile_definitions(dlopen_runner PRIVATE
     MATHLIB_SHARED_NAME="$<TARGET_FILE_NAME:mathlib>"
 )
 
+# Compile other dynamic library for test cases
+add_library(testcases SHARED testcases.cpp)
+set_target_properties(testcases PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_executable(dynamic_runner runner.cpp)
+target_link_libraries(dynamic_runner PRIVATE ${CMAKE_DL_LIBS})
+
 add_dependencies(dlopen_runner mathlib)
