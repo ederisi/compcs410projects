@@ -16,7 +16,10 @@ extern "C" {
 
     double divide(double a, double b) {
         if (b == 0) return NAN;
-
         return a / b;
+    }
+
+    double power(double a, double b) {
+        return std::pow(a, b); 
     }
 }

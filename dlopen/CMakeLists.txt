@@ -8,9 +8,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-# Compile mathlib.cpp into a shared library
+# Compile shared libraries
 add_library(mathlib SHARED mathlib.cpp)
 set_target_properties(mathlib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_library(mathlib2 SHARED mathlib2.cpp)
+set_target_properties(mathlib2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_executable(dlopen main.cpp dlopen.cpp)
 

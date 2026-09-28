@@ -1,5 +1,5 @@
 # Format: librarypath function name arg1 arg2
 ./libmathlib.so add 1 1
 ./libmathlib.so multiply 5 4
-./libtestcases.so power 2 3
-./libtestcases.so hypotenuse 3 4
+./libmathlib.so power 2 3
+./libmathlib2.so sqrt 3
