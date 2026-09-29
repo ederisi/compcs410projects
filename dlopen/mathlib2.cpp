@@ -1,21 +1,20 @@
 #include <cmath>
 
-// extern C blocks name problems, in order for dlsym to find functions
 extern "C" {
     
-    double sqrt(double a) {
+    double mathlib_sqrt(double a) {
         return std::sqrt(a);
     }
 
-    double sin(double a) {
+    double mathlib_sin(double a) {
         return std::sin(a);
     }
 
-    double cos(double a) {
+    double mathlib_cos(double a) {
         return std::cos(a);
     }
 
-    double tan(double a) {
+    double mathlib_tan(double a) {
         return std::tan(a);
     }
 }

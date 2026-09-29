@@ -15,22 +15,22 @@ static constexpr std::string_view UNARY_MATH_LIB = "./libmathlib2.so";
 // Binary operations
 double DLOPEN::calculate(double a, double b, Operand operand) {
     // Choose the function (from binary) and resolve library name by operand
-    std::string func_name;
+    std::string func_name = "mathlib_";
     switch (operand) {
     case ADD: 
-        func_name = "add";
+        func_name += "add";
         break;
     case SUBTRACT: 
-        func_name = "subtract";
+        func_name += "subtract";
         break;
     case MULTIPLY: 
-        func_name = "multiply";
+        func_name += "multiply";
         break;
     case DIVIDE: 
-        func_name = "divide";
+        func_name += "divide";
         break;
     case POWER:
-        func_name = "power";
+        func_name += "power";
         break; 
     default:
         return NAN;
@@ -64,19 +64,19 @@ double DLOPEN::calculate(double a, double b, Operand operand) {
 
 // Unary operations
 double DLOPEN::calculate(double a, Operand operand) {
-    std::string func_name;
+    std::string func_name = "mathlib_";
     switch (operand) {
     case SQRT:
-        func_name = "sqrt";
+        func_name += "sqrt";
         break;
     case SIN:
-        func_name = "sin";
+        func_name += "sin";
         break;
     case COS:
-        func_name = "cos";
+        func_name += "cos";
         break;
     case TAN:
-        func_name = "tan";
+        func_name += "tan";
         break;
     default:
         return NAN;
@@ -100,7 +100,6 @@ double DLOPEN::calculate(double a, Operand operand) {
 
     double result = op_func(a);
     dlclose(handle);
-
     return result;
 }
 

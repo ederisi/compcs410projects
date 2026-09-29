@@ -3,3 +3,4 @@
 ./libmathlib.so multiply 5 4
 ./libmathlib.so power 2 3
 ./libmathlib2.so sqrt 3
+./libmathlib2.so sin -1.1
