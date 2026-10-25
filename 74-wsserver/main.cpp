@@ -11,6 +11,8 @@
 #include <vector>
 #include <thread>
 #include <iostream>
+#include <filesystem>
+#include <fcntl.h>
 #include <signal.h>
 #include "websocket.h" 
 
@@ -19,10 +21,41 @@
 #define SA struct sockaddr
 #define MSG_INTERVAL 3
 
+void enableLogging() {
+    // Resolve the directory of the currently running executable
+    std::filesystem::path exe_dir = std::filesystem::canonical("/proc/self/exe").parent_path();
+    std::filesystem::path log_path = exe_dir / "ws_server.log";
+
+    int log_fd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (log_fd < 0) {
+        std::cerr << "Failed to open log file: " << log_path << "\n";
+        return;
+    }
+
+    // Redirect stdout and stderr to the log file
+    dup2(log_fd, STDOUT_FILENO);
+    dup2(log_fd, STDERR_FILENO);
+    close(log_fd);
+
+    // Flush output immediately so logs appear in real-time
+    std::cout << std::unitbuf;
+    std::cerr << std::unitbuf;
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+}
+
 // Driver function 
-int main() 
+int main(int argc, char* argv[])
 { 
-    signal(SIGPIPE, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN); 
+
+    // Detect if logging is requested
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "-b") {
+            enableLogging();
+            break;
+        }
+    }
 
     int sockfd, connfd, len; 
     struct sockaddr_in servaddr, cli; 

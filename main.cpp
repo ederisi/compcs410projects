@@ -13,7 +13,8 @@
 #include <csignal>
 
 static const std::vector<std::pair<std::string, Process>> PROCESS_REGISTRY = {
-    {"dlopen", {"dlopen", true}}
+    {"dlopen", {"dlopen", true}},
+    {"wsserver", {"wsserver", false}}
 };
 
 const Process* find_process(const std::string& name) {

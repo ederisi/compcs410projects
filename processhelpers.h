@@ -47,11 +47,18 @@ namespace ProcessHelpers
                     _exit(127);
                 }
                 close(fd);
-            }
 
-            execl(process.executable.c_str(),
-                process.executable.c_str(),
-                static_cast<char*>(nullptr));
+                // Launch background service with -b flag
+                execl(process.executable.c_str(),
+                      process.executable.c_str(),
+                      "-b",
+                      static_cast<char*>(nullptr));
+            } else {
+                // Launch interactive CLI normally
+                execl(process.executable.c_str(),
+                      process.executable.c_str(),
+                      static_cast<char*>(nullptr));
+            }
 
             std::perror("execl");
             _exit(127);
