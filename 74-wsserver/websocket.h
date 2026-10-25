@@ -4,8 +4,15 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <chrono>
 
-std::string base64_encode(const unsigned char* bytes, size_t len);
-std::string generateAcceptKey(const std::string& clientKey);
+namespace WEBSOCKET {
+    std::string extractClientKey(const std::string& request);
+    std::string buildHandshakeResponse(const std::string& clientKey);
+    std::vector<unsigned char> buildTimeFrame();
+
+    static std::string base64Encode(const unsigned char* bytes, size_t len);
+    static std::string generateAcceptKey(const std::string& clientKey);
+}
 
 #endif

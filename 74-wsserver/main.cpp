@@ -10,29 +10,33 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <iostream>
+#include <signal.h>
+#include "websocket.h" 
+
 #define MAX 2048
 #define PORT 8080 
 #define SA struct sockaddr
-#include "websocket.h" 
-#include "times.h"
-  
-#include <cstdint>
-#include <vector>
+#define MSG_INTERVAL 3
 
 // Driver function 
 int main() 
 { 
+    signal(SIGPIPE, SIG_IGN);
+
     int sockfd, connfd, len; 
     struct sockaddr_in servaddr, cli; 
   
     // socket create and verification 
     sockfd = socket(AF_INET, SOCK_STREAM, 0); 
     if (sockfd == -1) { 
-        printf("socket creation failed...\n"); 
-        exit(0); 
+        std::cerr << "WSServer Socket creation failed. Exiting." << "\n\n";
+        return 1; 
     } 
-    else
-        printf("Socket successfully created..\n"); 
+
+    // Allow immediate port reuse if the server is restarted via Ctrl+C
+    int opt = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     bzero(&servaddr, sizeof(servaddr)); 
   
     // assign IP, PORT 
@@ -42,83 +46,91 @@ int main()
   
     // Binding newly created socket to given IP and verification 
     if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) { 
-        printf("socket bind failed...\n"); 
-        exit(0); 
+        std::cerr << "WSServer Socket bind failed. Exiting." << "\n\n";
+        close(sockfd);
+        return 1; 
     } 
-    else
-        printf("Socket successfully binded..\n"); 
   
     // Now server is ready to listen and verification 
     if ((listen(sockfd, 5)) != 0) { 
-        printf("Listen failed...\n"); 
-        exit(0); 
+        std::cerr << "WSServer failed to listen socket. Exiting." << "\n\n";
+        close(sockfd);
+        return 1; 
     } 
-    else
-        printf("Server listening..\n"); 
-    len = sizeof(cli); 
 
-    connfd = accept(sockfd, (SA*)&cli, (socklen_t*)&len);
+    // Main server loop: accepts one client, keeps waiting for a new client whenever the current one fails or closes
+    while (true) {
+        std::cout << "WSServer waiting for a client connection..." << std::endl; 
 
-    if (connfd < 0) {
-        printf("server accept failed.. \n");
-        exit(0);
-    }
+        struct sockaddr_in cli;
+        socklen_t len = sizeof(cli); 
+        int connfd = accept(sockfd, (SA*)&cli, &len);
 
-    else {
-        printf("server accepted the client... \n");
-    }
+        if (connfd < 0) {
+            std::cerr << "WSServer failed to accept a client. Retrying...\n";
+            continue; 
+        }
+        std::cout << "WSServer accepted a client. Executing WS handshake..." << std::endl; 
 
-    char buff[MAX] = {0};
-    //  Read the client's HTTP request into the buffer
-    ssize_t bytes_read = read(connfd, buff, sizeof(buff) - 1);
-    if (bytes_read <= 0) {
-        close(connfd);
-        exit(0);
-    }   
+        // Read the client's HTTP request into a buffer
+        char buff[MAX] = {0};
+        ssize_t bytes_read = read(connfd, buff, sizeof(buff) - 1);
+        if (bytes_read <= 0) {
+            std::cerr << "WSServer failed to read client's HTTP request. Dropping client.\n\n"; 
+            close(connfd);
+            continue; 
+        }   
+        std::string request(buff, bytes_read);
 
-    // Convert it directly to a string
-    std::string request(buff, bytes_read);
-
-    std::string client_key;
-    std::string search_str = "Sec-WebSocket-Key: ";
-
-    //  Now you can easily search the string for the key
-    size_t key_pos = request.find(search_str);
-    
-    if (key_pos != std::string::npos) {
-        // Move the position forward to the start of the actual key string
-        size_t start_pos = key_pos + search_str.length();
-
-        // Find the end of the line (HTTP headers always end with \r\n)
-        size_t end_pos = request.find("\r\n", start_pos);
-
-        if (end_pos != std::string::npos) {
-            // Extract just the key by slicing the string (start index, length)
-            client_key = request.substr(start_pos, end_pos - start_pos);
-        
-            printf("Successfully extracted key: %s\n", client_key.c_str());
+        // Try extracting client key from request
+        std::string client_key = WEBSOCKET::extractClientKey(request);
+        if (client_key.empty()) {
+            std::cerr << "WSServer could not extract Sec-WebSocket-Key. Dropping client.\n\n";
+            close(connfd);
+            continue; 
         }
 
+        // Build and send handshake response to client 
+        std::string http_response = WEBSOCKET::buildHandshakeResponse(client_key);
+        ssize_t bytes_sent = send(connfd, http_response.c_str(), http_response.length(), MSG_NOSIGNAL);
+
+        if (bytes_sent <= 0) {
+            std::cerr << "WSServer failed to send WS promotion handshake. Dropping client.\n\n";
+            close(connfd);
+            continue; 
+        } 
+
+        // Enter loop sending time to the connected client 
+        std::cout << "Handshake sent successfully. Starting to send time..." << std::endl;
+        bool client_connected = true;
+
+        while (client_connected) {
+            auto frame = WEBSOCKET::buildTimeFrame(); // Get time as TEXT packet frame
+
+            // Send frame
+            size_t total_sent = 0;
+            while (total_sent < frame.size()) {
+                ssize_t sent = send(connfd, 
+                                    reinterpret_cast<const char*>(frame.data() + total_sent), 
+                                    frame.size() - total_sent, 
+                                    MSG_NOSIGNAL);
+                if (sent <= 0) {
+                    std::cerr << "Client disconnected or socket error occurred.\n\n";
+                    client_connected = false;
+                    break; // Break out of the inner frame-sending loop
+                }
+                total_sent += sent;
+            }
+            
+            if (!client_connected) {
+                break; // Break out of the client loop to accept a new connection
+            }
+
+            // Sleep 3s before next message
+            std::this_thread::sleep_for(std::chrono::seconds(MSG_INTERVAL));
+        }
+        close(connfd); // Close connection 
     }
-    std::string acceptkey = generateAcceptKey(client_key);
-
-    // Build HTTP response
-    std::string http_response = 
-    "HTTP/1.1 101 Switching Protocols\r\n"
-    "Upgrade: websocket\r\n"
-    "Connection: Upgrade\r\n"
-    "Sec-WebSocket-Accept: " + acceptkey + "\r\n\r\n";
-
-    // Send response to client 
-    ssize_t bytes_sent = write(connfd, http_response.c_str(), http_response.length());
-
-    if (bytes_sent > 0) {
-        printf("Handshake sent successfully. Starting to send time...\n");
-    
-        // Handshake ready
-        sendTime(connfd);
-    } else {
-        printf("Failed to send handshake.\n");
-    }
-
+    close(sockfd); // Close socket
+    return 0; 
 }

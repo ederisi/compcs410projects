@@ -1,7 +1,64 @@
 #include "websocket.h"
 
+std::string WEBSOCKET::extractClientKey(const std::string& request) {
+    std::string client_key;
+    std::string search_str = "Sec-WebSocket-Key: ";
+
+    // Search request for the key
+    size_t key_pos = request.find(search_str);
+    
+    if (key_pos != std::string::npos) {
+        // Move the position forward to the start of the actual key string
+        size_t start_pos = key_pos + search_str.length();
+
+        // Find the end of the line (HTTP headers always end with \r\n)
+        size_t end_pos = request.find("\r\n", start_pos);
+
+        if (end_pos != std::string::npos) {
+            // Extract 
+            client_key = request.substr(start_pos, end_pos - start_pos);
+        }
+    }
+    return client_key; 
+}
+
+std::string WEBSOCKET::buildHandshakeResponse(const std::string& clientKey) {
+    // Encode accept key to return to client with SHA-1 
+    std::string accept_key = generateAcceptKey(clientKey); 
+
+    // Build response payload
+    std::string http_response = 
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    "Sec-WebSocket-Accept: " + accept_key + "\r\n\r\n";
+
+    return http_response; 
+}
+
+std::vector<unsigned char> WEBSOCKET::buildTimeFrame() {
+    // Get current time and convert to text
+    auto time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::string time_str = std::ctime(&time);
+    size_t length = time_str.size();
+
+
+    std::vector<unsigned char> frame;
+    frame.push_back(0x81); // FIN-bit (0x80) and TEXT-opcode (0x01)
+    
+    // Add time length
+    frame.push_back(static_cast<unsigned char>(length));
+
+    // add actual time information to frame
+    for (char c : time_str) {
+        frame.push_back(c);
+    }
+
+    return std::move(frame);
+}
+
 // Individual Base64-coder
-std::string base64_encode(const unsigned char* bytes, size_t len) {
+std::string WEBSOCKET::base64Encode(const unsigned char* bytes, size_t len) {
     const std::string b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string ret;
     int i = 0, j = 0;
@@ -32,7 +89,7 @@ std::string base64_encode(const unsigned char* bytes, size_t len) {
 
 // Minimalistic and individual SHA-1
 #define SHA1_ROTL(bits, word) (((word) << (bits)) | ((word) >> (32-(bits))))
-    std::string generateAcceptKey(const std::string& clientKey) {
+std::string WEBSOCKET::generateAcceptKey(const std::string& clientKey) {
     std::string magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     std::string text = clientKey + magic;
     
@@ -82,5 +139,5 @@ std::string base64_encode(const unsigned char* bytes, size_t len) {
         hash[i*4+3] = h[i] & 0xFF;
     }
 
-    return base64_encode(hash, 20);
+    return base64Encode(hash, 20);
 }
