@@ -88,7 +88,7 @@ static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                 return -EFAULT;
         
             // Actualy encryption XOR
-            for (i = 0; i < my_data->size; i++) {
+            for (int i = 0; i < my_data->size; i++) {
                 my_data->buffer[i] ^= mid.key;
             }
             break;
@@ -112,7 +112,7 @@ static const struct file_operations my_fops ={
 static int __init my_init_module(void) {
     int i, err;
 
-    err = regiter_chrdev_region(MKDEV(MY_MAJOR, 0), MY_MAX_MINORS, "my_device_driver");
+    err = register_chrdev_region(MKDEV(MY_MAJOR, 0), MY_MAX_MINORS, "my_device_driver");
     if (err != 0) return err;
 
     for (i=0; i < MY_MAX_MINORS; i++) {
