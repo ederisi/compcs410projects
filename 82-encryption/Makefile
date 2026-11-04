@@ -1,20 +1,9 @@
-KDIR ?= /lib/modules/$(shell uname -r)/build
-CXX  ?= g++
-CC   ?= gcc
+.DEFAULT_GOAL := all
+.PHONY: all main encryption module clean
 
-CXXFLAGS ?= -Wall -Wextra -std=c++20
-obj-m := sd.o
+all: encryption module
 
-.PHONY: all module clean
+main: encryption
 
-all: main module
-
-main: main.cpp sd.h
-	$(CXX) $(CXXFLAGS) main.cpp -o main
-
-module: sd.c sd.h
-	$(MAKE) -C $(KDIR) M=$(CURDIR) modules
-
-clean:
-	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
-	$(RM) main
+encryption module clean:
+	$(MAKE) -C .. $@
