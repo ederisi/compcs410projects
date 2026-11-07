@@ -6,7 +6,6 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/ioctl.h>
-#include <errno.h>
 #include "sd.h"
 
 // Apufunktio binääridatan (kuten SHA-1) siistiin tulostamiseen heksana
