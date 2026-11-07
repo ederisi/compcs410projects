@@ -75,8 +75,7 @@ static ssize_t my_write(struct file *file, const char __user *user_buffer,
 
     return len;
 }
-
-// IOCTL-call
+// IOCTL call
 static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     struct my_device_data *my_data = (struct my_device_data*) file->private_data;
@@ -86,12 +85,15 @@ static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         case MY_IOCTL_IN:
             if (copy_from_user(&mid, (my_ioctl_data __user *) arg, sizeof(my_ioctl_data)))
                 return -EFAULT;
-        
-            // Actualy encryption XOR
-            for (i = 0; i < my_data->size; i++) {
-                my_data->buffer[i] ^= mid.key;
-            }
+            apply_xor_encryption(my_data, mid.key);
             break;
+
+        case MY_IOCTL_SHA1:
+            return apply_sha1_hash(my_data);
+
+        case MY_IOCTL_BASE64:
+            return apply_base64_encode(my_data);
+
         default:
             return -ENOTTY;
     }
