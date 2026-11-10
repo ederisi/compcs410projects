@@ -65,11 +65,15 @@ $(MODULE_DIR)/sd.h: 82-encryption/sd.h
 	mkdir -p "$(@D)"
 	cp $< $@
 
+$(MODULE_DIR)/crypto.c: 82-encryption/crypto.c
+	mkdir -p "$(@D)"
+	cp $< $@
+
 $(MODULE_DIR)/Kbuild: Makefile
 	mkdir -p "$(@D)"
-	printf '%s\n' 'obj-m := sd.o' > $@
+	printf '%s\n' 'obj-m := secret_driver.o' 'secret_driver-y := sd.o crypto.o' > $@
 
-module: $(MODULE_DIR)/sd.c $(MODULE_DIR)/sd.h $(MODULE_DIR)/Kbuild
+module: $(MODULE_DIR)/sd.c $(MODULE_DIR)/sd.h $(MODULE_DIR)/crypto.c $(MODULE_DIR)/Kbuild
 	$(MAKE) -C "$(KDIR)" M="$(abspath $(MODULE_DIR))" modules
 
 # Existing executable and shared-library paths are relative to the working directory.

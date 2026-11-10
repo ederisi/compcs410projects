@@ -8,17 +8,6 @@
 
 #define MY_MAJOR       42
 #define MY_MAX_MINORS  5
-#define BUF_SIZE       1024
-
-#define MY_IOCTL_OUT _IOC( _IOC_READ, 'k', 1, sizeof(my_ioctl_data))
-
-
-// Device's struct
-struct my_device_data {
-    struct cdev cdev;
-    char buffer[BUF_SIZE];
-    size_t size;
-};
 // Device board
 static struct my_device_data devs[MY_MAX_MINORS];
 
@@ -60,6 +49,8 @@ static ssize_t my_write(struct file *file, const char __user *user_buffer,
 {
     struct my_device_data *my_data = (struct my_device_data *) file->private_data;
 
+    if (*offset == 0)
+        my_data->size = 0;
     if (*offset >= BUF_SIZE) return -ENOSPC;
     ssize_t len = min((size_t)(BUF_SIZE - *offset), size);
     if (len <= 0) return 0;
@@ -78,30 +69,25 @@ static ssize_t my_write(struct file *file, const char __user *user_buffer,
 // IOCTL call
 static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    struct my_device_data *my_data = (struct my_device_data*) file->private_data;
+    struct my_device_data *my_data = file->private_data;
     my_ioctl_data mid;
+    int err;
 
-    switch(cmd) {
-        case MY_IOCTL_IN:
-            if (copy_from_user(&mid, (my_ioctl_data __user *) arg, sizeof(my_ioctl_data)))
-                return -EFAULT;
-        
-            // Actualy encryption XOR
-            for (i = 0; i < my_data->size; i++) {
-                my_data->buffer[i] ^= mid.key;
-            }
-            break;
-
-        case MY_IOCTL_SHA1:
-            return apply_sha1_hash(my_data);
-
-        case MY_IOCTL_BASE64:
-            return apply_base64_encode(my_data);
-
-        default:
-            return -ENOTTY;
+    switch (cmd) {
+    case MY_IOCTL_SET_KEY:
+        if (copy_from_user(&mid, (my_ioctl_data __user *)arg, sizeof(mid)))
+            return -EFAULT;
+        my_data->key = mid.key;
+        return 0;
+    case MY_IOCTL_IN:
+        apply_xor_encryption(my_data, my_data->key);
+        err = apply_sha1_hash(my_data);
+        if (err)
+            return err;
+        return apply_base64_encode(my_data);
+    default:
+        return -ENOTTY;
     }
-    return 0;
 }
 
 // File operations
@@ -123,6 +109,7 @@ static int __init my_init_module(void) {
 
     for (i=0; i < MY_MAX_MINORS; i++) {
         devs[i].size = 0;
+        devs[i].key = 0;
         cdev_init(&devs[i].cdev, &my_fops);
         cdev_add(&devs[i].cdev, MKDEV(MY_MAJOR, i), 1);
     }
