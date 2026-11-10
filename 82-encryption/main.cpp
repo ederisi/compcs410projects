@@ -65,34 +65,46 @@ int main(int argc, char *argv[]) {
         size_t message_len = strlen(argv[i]);
         if (message_len > BUF_SIZE) {
             std::cerr << "Message " << i - 1 << " exceeds " << BUF_SIZE << " bytes\n";
-            result = 1;
-            break;
+            return 1;
         }
 
-        if (lseek(fd, 0, SEEK_SET) == (off_t)-1 ||
-            write(fd, argv[i], message_len) != (ssize_t)message_len) {
-            std::cerr << "Writing message failed: " << std::strerror(errno) << '\n';
-            result = 1;
-            break;
+        // Open once per message. This resets the device file position to zero.
+        int fd = open(dev_path, O_RDWR);
+        if (fd < 0) {
+            std::cerr << "Driver open failed: " << std::strerror(errno) << '\n';
+            return 1;
         }
+
+        if (write(fd, argv[i], message_len) != static_cast<ssize_t>(message_len)) {
+            std::cerr << "Writing message failed: " << std::strerror(errno) << '\n';
+            close(fd);
+            return 1;
+        }
+
         if (ioctl(fd, MY_IOCTL_IN) == -1) {
             std::cerr << "Encrypting message failed: " << std::strerror(errno) << '\n';
-            result = 1;
-            break;
+            close(fd);
+            return 1;
         }
-        if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
-            std::cerr << "Rewinding encrypted message failed: " << std::strerror(errno) << '\n';
-            result = 1;
-            break;
+
+        // Reset device position without lseek; this driver has no llseek handler.
+        close(fd);
+        fd = open(dev_path, O_RDONLY);
+        if (fd < 0) {
+            std::cerr << "Reopening driver failed: " << std::strerror(errno) << '\n';
+            return 1;
         }
+
         ssize_t bytes_read = read(fd, read_buf, BUF_SIZE);
         if (bytes_read < 0) {
             std::cerr << "Reading encrypted message failed: " << std::strerror(errno) << '\n';
-            result = 1;
-            break;
+            close(fd);
+            return 1;
         }
+
         read_buf[bytes_read] = '\0';
         std::cout << read_buf << '\n';
+        close(fd);
     }
 
     close(fd);
