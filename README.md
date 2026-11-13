@@ -2,8 +2,6 @@
 This repository houses a collection of low-level systems programming and C++ projects developed for COMP.CS.410, focusing on dynamic library loading, networking protocols, Linux kernel module development, and process orchestration.
 
 ## Project Structure
-The project is organized into modular directories under a unified build system managed by a root Makefile:
-## Project Structure
 
 The project is organized into modular directories under a unified build system managed by a root `Makefile`:
 
