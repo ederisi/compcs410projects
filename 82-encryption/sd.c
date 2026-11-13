@@ -8,25 +8,26 @@
 
 #define MY_MAJOR       42
 #define MY_MAX_MINORS  5
-// Device board
+// Array of custom device driver structures (supports up to 5)
 static struct my_device_data devs[MY_MAX_MINORS];
 
-// Open call
+// Device open call
 static int my_open(struct inode *inode, struct file *file)
 {
     struct my_device_data *my_data;
+    // Retrieve pointer containing my_device_data
     my_data = container_of(inode->i_cdev, struct my_device_data, cdev);
-    // validate access to device
+    // store device data pointer in file private data
     file->private_data = my_data;
     return 0;
 }
 
-// Release call
+// Release device call
 static int my_release(struct inode *inode, struct file *file) { 
     return 0;
 }
 
-// Read call
+// Device read call
 static ssize_t my_read(struct file *file, char __user *user_buffer, size_t size, loff_t *offset)
 {
     struct my_device_data *my_data;
@@ -36,37 +37,39 @@ static ssize_t my_read(struct file *file, char __user *user_buffer, size_t size,
     if (*offset >= my_data->size) return 0;
     if (len <= 0) return 0;
 
-    // read data from my_data->buffer to user buffer
+    // Safely copy data from my_data->buffer to user buffer
     if (copy_to_user(user_buffer, my_data->buffer + *offset, len)) return -EFAULT;
 
     *offset += len;
     return len;
 }
 
-// Write call
+// Device write call
 static ssize_t my_write(struct file *file, const char __user *user_buffer,
                     size_t size, loff_t * offset)
 {
     struct my_device_data *my_data = (struct my_device_data *) file->private_data;
 
+    // reset size counter if writing from the beginning of the file offset
     if (*offset == 0)
         my_data->size = 0;
     if (*offset >= BUF_SIZE) return -ENOSPC;
     ssize_t len = min((size_t)(BUF_SIZE - *offset), size);
     if (len <= 0) return 0;
 
-    /* read data from user buffer to my_data->buffer */
+    // safely copy data from my_data->buffer
     if (copy_from_user(my_data->buffer + *offset, user_buffer, len)) return -EFAULT;
 
     *offset += len;
 
+    // Update stored data size
     if (*offset > my_data->size) {
         my_data->size = *offset;
     }
 
     return len;
 }
-// IOCTL call
+// Device IOCTL call
 static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     struct my_device_data *my_data = file->private_data;
@@ -75,18 +78,20 @@ static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
     switch (cmd) {
     case MY_IOCTL_SET_KEY:
+    // Copy key structure args from user space
         if (copy_from_user(&mid, (my_ioctl_data __user *)arg, sizeof(mid)))
             return -EFAULT;
         my_data->key = mid.key;
         return 0;
     case MY_IOCTL_IN:
+    // Apply encryption
         apply_xor_encryption(my_data, my_data->key);
         err = apply_sha1_hash(my_data);
         if (err)
             return err;
         return apply_base64_encode(my_data);
     default:
-        return -ENOTTY;
+        return -ENOTTY; // Inappropriate ioctl command error
     }
 }
 
@@ -100,13 +105,15 @@ static const struct file_operations my_fops ={
     .unlocked_ioctl = my_ioctl
 };
 
-// Module initialization
+// Kernel module initialization
 static int __init my_init_module(void) {
     int i, err;
 
+    // Register character device region
     err = register_chrdev_region(MKDEV(MY_MAJOR, 0), MY_MAX_MINORS, "my_device_driver");
     if (err != 0) return err;
 
+    // Initialize and add each minor device
     for (i=0; i < MY_MAX_MINORS; i++) {
         devs[i].size = 0;
         devs[i].key = 0;
@@ -117,7 +124,7 @@ static int __init my_init_module(void) {
     return 0;
 }
 
-// Erase module
+// Kernel module cleanup
 static void __exit my_cleanup_module(void) {
     int i;
     for (i=0; i < MY_MAX_MINORS ; i++) {
@@ -127,7 +134,7 @@ static void __exit my_cleanup_module(void) {
     unregister_chrdev_region(MKDEV(MY_MAJOR, 0), MY_MAX_MINORS);
 }
 
-// Macros for module load
+// Register module entry and exit points
 module_init(my_init_module);
 module_exit(my_cleanup_module);
 MODULE_LICENSE("GPL");

@@ -5,14 +5,15 @@
 #include <cmath>
 #include <fstream>
 
-// Function pointer signatures for dynamic loading
+// Function pointer signatures for dynamically loading math functions
 typedef double (*BinaryMathFunc)(double, double);
 typedef double (*UnaryMathFunc)(double);
 
+// Paths to shared libraries (with binary and unary operations)
 static constexpr std::string_view BINARY_MATH_LIB = "./libmathlib.so";
 static constexpr std::string_view UNARY_MATH_LIB = "./libmathlib2.so";
 
-// Binary operations
+// Dynamically load and calculate binary operations
 double DLOPEN::calculate(double a, double b, Operand operand) {
     // Choose the function (from binary) and resolve library name by operand
     std::string func_name = "mathlib_";
@@ -36,16 +37,20 @@ double DLOPEN::calculate(double a, double b, Operand operand) {
         return NAN;
     }
 
-    // Open linked library from relative path
+    // Open shared library using dlopen with lazy symbol resolution
     void* handle = dlopen(std::string(BINARY_MATH_LIB).c_str(), RTLD_LAZY);
     if (!handle) {
         std::cerr <<"Error running library: " << dlerror() << "\n";
         return NAN; 
     }
 
+    // Clear existing error states
     dlerror();
+    // Resolve function symbol from the loaded handle
+    // and cast it to function pointer type
     BinaryMathFunc op_func = reinterpret_cast<BinaryMathFunc>(dlsym(handle, func_name.c_str()));
 
+    // Check dlsym errors and locate the function symbol
     char* error = dlerror();
     if (error != nullptr) {
         std::cerr << "Error when loading symbol '" << func_name << ": " << error << '\n';
@@ -56,14 +61,15 @@ double DLOPEN::calculate(double a, double b, Operand operand) {
     // Calculate from binary with given function
     double result = op_func(a, b);
 
-    // close handle
+    // close library to free resources
     dlclose(handle);
 
     return result;
 }
 
-// Unary operations
+// Dynamically load and calculate unary operations
 double DLOPEN::calculate(double a, Operand operand) {
+    // Map operand enum value to corresponding unary func symbol name
     std::string func_name = "mathlib_";
     switch (operand) {
     case SQRT:
@@ -82,15 +88,19 @@ double DLOPEN::calculate(double a, Operand operand) {
         return NAN;
     }
 
+    // Open unary shared library handle
     void* handle = dlopen(std::string(UNARY_MATH_LIB).c_str(), RTLD_LAZY);
     if (!handle) {
         std::cerr << "Error running library: " << dlerror() << "\n";
         return NAN; 
     }
 
-    dlerror(); 
+    // Reset error buffer
+    dlerror();
+    // Resolve unary func symbol
     UnaryMathFunc op_func = reinterpret_cast<UnaryMathFunc>(dlsym(handle, func_name.c_str()));
 
+    // Validate symbol resolution
     char* error = dlerror();
     if (error != nullptr) {
         std::cerr << "Error when loading symbol '" << func_name << "': " << error << '\n';
@@ -98,11 +108,16 @@ double DLOPEN::calculate(double a, Operand operand) {
         return NAN;
     }
 
+    // execute unary function
     double result = op_func(a);
+
+    // Close handle and return result
     dlclose(handle);
     return result;
 }
 
+// Parse and execute a sequence of math script commands
+// from an input file
 bool DLOPEN::execute_script(const std::string& filepath) {
     std::ifstream infile(filepath);
     if (!infile) {
@@ -137,7 +152,7 @@ bool DLOPEN::execute_script(const std::string& filepath) {
             }
         }
         
-        // Load dynamic library
+        // Load specifiedd dynamic library for current script line
         void* handle = dlopen(lib_name.c_str(), RTLD_LAZY);
         if (!handle) {
             std::cerr << "Library load failed (" << lib_name << "): " << dlerror() << "\n";
@@ -155,6 +170,7 @@ bool DLOPEN::execute_script(const std::string& filepath) {
                 continue;
             }
 
+            // Call unary func and print formatted output
             double result = func(arg1);
             std::cout << "Applying: " << lib_name << " -> " << func_name
                       << "(" << arg1 << ") = " << result << "\n";
@@ -167,6 +183,7 @@ bool DLOPEN::execute_script(const std::string& filepath) {
                 continue;
             }
 
+            // Call binary function with two arguments and print result
             double result = func(arg1, arg2);
             std::cout << "Applying: " << lib_name << " -> " << func_name
                       << "(" << arg1 << ", " << arg2 << ") = " << result << "\n";

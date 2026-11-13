@@ -3,7 +3,7 @@
 #include <linux/string.h>
 #include "sd.h"
 
-// Simple XOR-encryption
+// Applies a simple XOR encryption/deceyption key to the device data buffer
 void apply_xor_encryption(struct my_device_data *data, int key) {
     int i;
     for (i = 0; i < data->size; i++) {
@@ -24,40 +24,43 @@ int apply_sha1_hash(struct my_device_data *data) {
     size_t offset;
     int i;
     
-    // Text padding
+    // Text padding amount
     while (padded_len % 64 != 56) {
         padded_len++;
     }
-    padded_len += 8;
+    padded_len += 8; // add 8 bytes for the 64-bit message length trailer
     
-    // malloc in kernel
+    // Allocate temporary kernel memory for the padded message buffer
     msg = kmalloc(padded_len, GFP_KERNEL);
     if (!msg) return -ENOMEM;
     
     memset(msg, 0, padded_len);
     memcpy(msg, data->buffer, data->size);
     
-    // give message
+    // Append mandatory single '1' bit
     msg[data->size] = 0x80;
     
-    // Add length to end
+    // Append the original message length in bits as a 64-bit-endian int
     for (i = 7; i >= 0; --i) {
         msg[padded_len - 1 - i] = (ml >> (i * 8)) & 0xFF;
     }
     
-    // Handling in 512-bit frames
+    // Process padded msg in 512-bit (64-byte) blocks
     for (offset = 0; offset < padded_len; offset += 64) {
         u32 w[80];
         u32 a = h0, b = h1, c = h2, d = h3, e = h4;
         
+        // Break into sixteen 32-bit words
         for (i = 0; i < 16; ++i) {
             w[i] = (msg[offset + i*4] << 24) | (msg[offset + i*4 + 1] << 16) | 
                    (msg[offset + i*4 + 2] << 8) | (msg[offset + i*4 + 3]);
         }
+        // Expand sixteen 32-bit words into eighty 32-bit words
         for (i = 16; i < 80; ++i) {
             w[i] = SHA1_ROTL(1, w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16]);
         }
         
+        // Main SHA-1 mixing loop
         for (i = 0; i < 80; ++i) {
             u32 f, k, temp;
             if (i < 20) { 
@@ -81,12 +84,14 @@ int apply_sha1_hash(struct my_device_data *data) {
             b = a; 
             a = temp;
         }
+        // Accumulate intermediate block hash results into global state words
         h0 += a; h1 += b; h2 += c; h3 += d; h4 += e;
     }
     
+    // release temporary kernel message padding buffer
     kfree(msg);
     
-    // Shift to byte
+    // Shift to bytes and to buffer
     memset(data->buffer, 0, BUF_SIZE);
     u32 h[5] = {h0, h1, h2, h3, h4};
     
@@ -118,15 +123,16 @@ int apply_base64_encode(struct my_device_data *data) {
     // Base64 grows size: (len + 2) / 3 * 4
     encoded_len = 4 * ((len + 2) / 3);
     
-    // Ensure no growth above buffer size
+    // Ensure no growth(overflow) above buffer size
     if (encoded_len >= BUF_SIZE) {
         return -ENOSPC; 
     }
 
-    // Get temporary memory
+    // Get temporary memory in kernel space
     temp_out = kmalloc(encoded_len + 1, GFP_KERNEL);
     if (!temp_out) return -ENOMEM;
 
+    // Convert input bytes 3 ata time into 4 base64 chars
     while (len--) {
         char_array_3[i++] = *(bytes++);
         if (i == 3) {
@@ -140,6 +146,8 @@ int apply_base64_encode(struct my_device_data *data) {
             i = 0;
         }
     }
+
+    // Handle any remaining trailing bytes
     if (i) {
         for (j = i; j < 3; j++) char_array_3[j] = '\0';
         char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;

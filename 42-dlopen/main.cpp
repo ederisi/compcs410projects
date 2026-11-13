@@ -10,18 +10,21 @@
 
 int main() {
     std::string input;
+    // Configure output stream to print
     std::cout << std::setprecision(std::numeric_limits<double>::max_digits10);
 
+    // Main interactive calc loop running until EOF(CTRL+D)
     while (true) {
         std::cout << "Enter your input: ";
         if (!std::getline(std::cin, input)) break;
 
-        // If input contains '.txt' presume script was requested
+        // Check if input contains '.txt' presume script was requested
         if (input.find(".txt") != std::string::npos) {
             std::istringstream iss(input);
             std::string token;
             std::string filepath;
 
+            // Extract the token containing ".txt" as the target file path
             while (iss >> token) {
                 if (token.find(".txt") != std::string::npos) {
                     filepath = token;
@@ -29,6 +32,7 @@ int main() {
                 }
             }
 
+            // Execute the script (if valid filepath)
             if (!filepath.empty()) DLOPEN::execute_script(filepath);
             continue;
         }
@@ -39,9 +43,11 @@ int main() {
                            [](unsigned char c) { return std::isspace(c) != 0; }),
             input.end()
         );
+        // Skip empty lines/inputs consisting of whitespaces
         if (input.empty()) continue;
 
         double result;
+        // Evaluate the cleaned mathematical expression
         if (CalculatorUtils::evaluate(input, result)) {
             std::cout << "Result: " << result << "\n\n";
         } else {

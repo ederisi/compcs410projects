@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <chrono>
-
+// Namespace housing WebSocket server utilities
 namespace WEBSOCKET {
     std::string extractClientKey(const std::string& request);
     std::string buildHandshakeResponse(const std::string& clientKey);

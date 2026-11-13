@@ -12,11 +12,13 @@
 #include <vector>
 #include <csignal>
 
+// Registry mapping service and CLI program names to their process defs
 static const std::vector<std::pair<std::string, Process>> PROCESS_REGISTRY = {
     {"dlopen", {"dlopen", true}},
     {"wsserver", {"wsserver", false}}
 };
 
+// Look up a process definition in the registry by name
 const Process* find_process(const std::string& name) {
     for (const auto& entry : PROCESS_REGISTRY) {
         if (entry.first == name)
@@ -25,6 +27,7 @@ const Process* find_process(const std::string& name) {
     return nullptr;
 }
 
+// Volatile flag indicating that an exit (SIGINT) has been requested
 volatile std::sig_atomic_t exit_requested = 0; 
 extern "C" void sigint_handler(int) {
     exit_requested = 1;
@@ -41,6 +44,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Ignore SIGTTOU to prevent background processes from stopping
+    // when writing to terminal
     if (std::signal(SIGTTOU, SIG_IGN) == SIG_ERR) {
         std::perror("signal");
         return 1;
@@ -79,10 +84,10 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Start services before running any CLI.
+        // Start background services before running any CLI.
         for (const auto& [name, process] : requested) {
             if (process->cli)
-                continue;
+                continue; // Skip CLIs in this phase
 
             ProcessHelpers::reap_services(running_services);
 
@@ -144,8 +149,12 @@ int main(int argc, char* argv[]) {
         if (command.empty())
             continue;
 
+        // Handle 'quit' command to exit launcher
         if (command == "quit") {
             break;
+        
+        // Handle 'status' command to display the 
+        // running state of background services
         } else if (command == "status") {
             ProcessHelpers::reap_services(running_services);
 
@@ -160,6 +169,8 @@ int main(int argc, char* argv[]) {
                 else
                     std::cout << "running (PID " << it->second << ")\n";
             }
+        
+        // Handle 'kill' command to terminate a specific running background service
         } else if (command == "kill") {
             std::string name, extra;
             input >> name;
@@ -186,6 +197,7 @@ int main(int argc, char* argv[]) {
             ProcessHelpers::stop_service(it->second);
             running_services.erase(it);
 
+        // Handle 'run' command to start services/interactive CLIs dynamically
         } else if (command == "run") {
             std::vector<std::pair<std::string, const Process*>> requested;
             std::string name;

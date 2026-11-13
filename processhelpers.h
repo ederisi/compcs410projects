@@ -12,14 +12,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+// Represents process definition containing its executable path
 struct Process {
     std::string executable;
     bool cli;
 };
 
-
+// Namespace containing helper utils
 namespace ProcessHelpers 
 {
+    // Spawns a new child process for a given service or a CLI program
     pid_t spawn(const std::string& name, const Process& process) {
         pid_t pid = fork();
 
@@ -65,6 +67,7 @@ namespace ProcessHelpers
         }
 
         // Do this in the parent too, before handing the terminal to a CLI.
+        // (This avoids race conditions)
         if (setpgid(pid, pid) < 0 && errno != EACCES && errno != ESRCH)
             std::perror("setpgid(parent)");
 
@@ -72,11 +75,13 @@ namespace ProcessHelpers
         return pid;
     }
 
+    // Run a process, handing over terminal control if an interactive CLI
     pid_t run_process(const std::string& name, const Process& process, pid_t launcher_group) {
         pid_t pid = spawn(name, process);
         if (pid < 0 || !process.cli) // On failure or spawned background service do not waitpid
             return pid;
 
+        // Give terminal control to the interactive CLI
         if (tcsetpgrp(STDIN_FILENO, pid) < 0) {
             std::perror("tcsetpgrp(cli)");
             kill(-pid, SIGTERM);
@@ -88,10 +93,13 @@ namespace ProcessHelpers
         int status = 0;
         pid_t result;
 
+        // Wait for the interactive CLI process finish
         do {
             result = waitpid(pid, &status, 0);
         } while (result < 0 && errno == EINTR);
 
+
+        // Restore terminal control back to the launcher process group
         if (tcsetpgrp(STDIN_FILENO, launcher_group) < 0) {
             std::perror("tcsetpgrp(launcher)");
             return -1;
@@ -110,10 +118,13 @@ namespace ProcessHelpers
         return 0;
     }
 
+
+    // Checks and reaps any terminated background service non-blockingly
     void reap_services(std::unordered_map<std::string, pid_t>& services) {
         for (auto it = services.begin();
             it != services.end();) {
             int status = 0;
+            // Check process status without blocking using WNOHANG
             pid_t result = waitpid(it->second, &status, WNOHANG);
 
             if (result == it->second ||
@@ -126,6 +137,7 @@ namespace ProcessHelpers
         }
     }
 
+    // Stops a specific running service by sending SIGTERM to its process group
     void stop_service(pid_t pid) {
         // Signal the child's process group, not the launcher.
         if (kill(-pid, SIGTERM) < 0 && errno != ESRCH)
@@ -135,6 +147,7 @@ namespace ProcessHelpers
         }
     }
 
+    // Terminates all tracked background services
     void stop_services(std::unordered_map<std::string, pid_t>& services) {
         // Signal every tracked service before waiting for any of them.
         for (const auto& [name, pid] : services) {
@@ -146,6 +159,7 @@ namespace ProcessHelpers
                 std::perror("kill(SIGCONT)");
         }
 
+        // wait for all services to exit cleanly
         for (const auto& [name, pid] : services) {
             pid_t result;
             do {

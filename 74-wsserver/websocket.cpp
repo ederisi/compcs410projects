@@ -1,5 +1,6 @@
 #include "websocket.h"
 
+// Extracts the 'Sec-WebSocket-Key' header value from an incoming HTTP req
 std::string WEBSOCKET::extractClientKey(const std::string& request) {
     std::string client_key;
     std::string search_str = "Sec-WebSocket-Key: ";
@@ -15,13 +16,14 @@ std::string WEBSOCKET::extractClientKey(const std::string& request) {
         size_t end_pos = request.find("\r\n", start_pos);
 
         if (end_pos != std::string::npos) {
-            // Extract 
+            // Extract key substring
             client_key = request.substr(start_pos, end_pos - start_pos);
         }
     }
     return client_key; 
 }
 
+// Builds the HTTP 101 Switching protocol response
 std::string WEBSOCKET::buildHandshakeResponse(const std::string& clientKey) {
     // Encode accept key to return to client with SHA-1 
     std::string accept_key = generateAcceptKey(clientKey); 
@@ -36,6 +38,7 @@ std::string WEBSOCKET::buildHandshakeResponse(const std::string& clientKey) {
     return http_response; 
 }
 
+// Generates a WebSocket text frame containing current system time
 std::vector<unsigned char> WEBSOCKET::buildTimeFrame() {
     // Get current time and convert to text
     auto time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -44,7 +47,8 @@ std::vector<unsigned char> WEBSOCKET::buildTimeFrame() {
 
 
     std::vector<unsigned char> frame;
-    frame.push_back(0x81); // FIN-bit (0x80) and TEXT-opcode (0x01)
+    // Push WebSocket header byte: FIN-bit (0x80) + TEXT-opcode (0x01)
+    frame.push_back(0x81);
     
     // Add time length
     frame.push_back(static_cast<unsigned char>(length));
@@ -64,6 +68,7 @@ std::string WEBSOCKET::base64Encode(const unsigned char* bytes, size_t len) {
     int i = 0, j = 0;
     unsigned char char_array_3[3], char_array_4[4];
 
+    // process input data 3 bytes at a time
     while (len--) {
         char_array_3[i++] = *(bytes++);
         if (i == 3) {
@@ -75,6 +80,8 @@ std::string WEBSOCKET::base64Encode(const unsigned char* bytes, size_t len) {
             i = 0;
         }
     }
+
+    // Handle remaining trailing bytes and apply padding
     if (i) {
         for (j = i; j < 3; j++) char_array_3[j] = '\0';
         char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
@@ -103,19 +110,22 @@ std::string WEBSOCKET::generateAcceptKey(const std::string& clientKey) {
     while ((msg.size() * 8) % 512 != 448) msg.push_back(0);
     for (int i = 7; i >= 0; --i) msg.push_back((ml >> (i * 8)) & 0xFF);
 
-    // Handling in 512-bit frames
+    // Process padded message in 512 bit (64 byte) blocks
     for (size_t offset = 0; offset < msg.size(); offset += 64) {
         uint32_t w[80];
+        // Break block into sixteen 32-bit words
         for (int i = 0; i < 16; ++i) {
             w[i] = (msg[offset + i*4] << 24) | (msg[offset + i*4 + 1] << 16) | 
                    (msg[offset + i*4 + 2] << 8) | (msg[offset + i*4 + 3]);
         }
+        // Extend sixteen 32-bit words into eighty 32-bit words
         for (int i = 16; i < 80; ++i) {
             w[i] = SHA1_ROTL(1, w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16]);
         }
 
         uint32_t a = h0, b = h1, c = h2, d = h3, e = h4;
 
+        // Main SHA-1 mixing loop
         for (int i = 0; i < 80; ++i) {
             uint32_t f, k;
             if (i < 20) { f = (b & c) | ((~b) & d); k = 0x5A827999; }
@@ -126,10 +136,11 @@ std::string WEBSOCKET::generateAcceptKey(const std::string& clientKey) {
             uint32_t temp = SHA1_ROTL(5, a) + f + e + k + w[i];
             e = d; d = c; c = SHA1_ROTL(30, b); b = a; a = temp;
         }
+        // Accumulate intermediate block hash results into global state
         h0 += a; h1 += b; h2 += c; h3 += d; h4 += e;
     }
 
-    // Shift to byte
+    // Shift to byte array
     unsigned char hash[20];
     uint32_t h[5] = {h0, h1, h2, h3, h4};
     for (int i = 0; i < 5; ++i) {

@@ -1,5 +1,8 @@
 #include <cmath>
 
+// Use extern "C" to enforce C linkage, prevents C++ name mangling.
+// This ensures function names remain unaltered in compiled
+// shared object, allowing successfull location and load at runtime via dlsym()
 extern "C" {
     
     double mathlib_sqrt(double a) {
