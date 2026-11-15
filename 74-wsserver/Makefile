@@ -10,3 +10,7 @@ all: wsserver
 # Delegate build and clean commands to the Makefile in parent dir
 wsserver clean:
 	$(MAKE) -C .. $@
+
+.PHONY: run
+run:
+	$(MAKE) -C .. run-wsserver

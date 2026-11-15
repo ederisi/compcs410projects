@@ -8,6 +8,13 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 BIN := build/bin
 OBJ := $(BIN)/obj
 MODULE_DIR := $(BIN)/82-encryption
+KBUILD_DIR := $(MODULE_DIR)/kbuild
+DRIVER := $(MODULE_DIR)/secret_driver.ko
+RAW_DRIVER := $(KBUILD_DIR)/secret_driver.ko
+SIGNED_DRIVER := $(MODULE_DIR)/signed/secret_driver.ko
+SIGN_KEY := build/signing/MOK.priv
+SIGN_CERT := build/signing/MOK.der
+SIGN_FILE ?= $(KDIR)/scripts/sign-file
 
 LAUNCHER_OBJECTS := $(OBJ)/main.o
 DLOPEN_OBJECTS := $(OBJ)/42-dlopen/main.o $(OBJ)/42-dlopen/dlopen.o
@@ -56,29 +63,61 @@ $(OBJ)/%.o: %.cpp Makefile
 	mkdir -p "$(@D)"
 	$(CXX) $(CPPFLAGS) $(PRIVATE_DEFINES) $(CXXFLAGS) -std=c++20 $(PRIVATE_FLAGS) -MMD -MP -c $< -o $@
 
-# Stage module sources so kbuild also keeps every generated file under build/bin.
-$(MODULE_DIR)/sd.c: 82-encryption/sd.c
+# Keep kbuild's original module as the input for every signature.
+$(KBUILD_DIR)/%.c: 82-encryption/%.c
 	mkdir -p "$(@D)"
 	cp $< $@
 
-$(MODULE_DIR)/sd.h: 82-encryption/sd.h
+$(KBUILD_DIR)/sd.h: 82-encryption/sd.h
 	mkdir -p "$(@D)"
 	cp $< $@
 
-$(MODULE_DIR)/crypto.c: 82-encryption/crypto.c
-	mkdir -p "$(@D)"
-	cp $< $@
-
-$(MODULE_DIR)/Kbuild: Makefile
+$(KBUILD_DIR)/Kbuild: Makefile
 	mkdir -p "$(@D)"
 	printf '%s\n' 'obj-m := secret_driver.o' 'secret_driver-y := sd.o crypto.o' > $@
 
-module: $(MODULE_DIR)/sd.c $(MODULE_DIR)/sd.h $(MODULE_DIR)/crypto.c $(MODULE_DIR)/Kbuild
-	$(MAKE) -C "$(KDIR)" M="$(abspath $(MODULE_DIR))" modules
+ifeq ($(words $(wildcard $(SIGN_KEY) $(SIGN_CERT))),2)
+MODULE_SOURCE := $(SIGNED_DRIVER)
+else
+MODULE_SOURCE := $(RAW_DRIVER)
+endif
 
-# Existing executable and shared-library paths are relative to the working directory.
-run: launcher dlopen wsserver
-	cd "$(BIN)" && ./launcher
+module: $(KBUILD_DIR)/sd.c $(KBUILD_DIR)/sd.h $(KBUILD_DIR)/crypto.c $(KBUILD_DIR)/Kbuild
+	$(MAKE) -C "$(KDIR)" M="$(abspath $(KBUILD_DIR))" modules
+ifeq ($(MODULE_SOURCE),$(SIGNED_DRIVER))
+	$(MAKE) "$(SIGNED_DRIVER)"
+else
+	@echo "Skipping local signing: requires $(SIGN_KEY) and $(SIGN_CERT)."
+endif
+	@cmp -s "$(MODULE_SOURCE)" "$(DRIVER)" || { cp "$(MODULE_SOURCE)" "$(DRIVER).tmp" && mv "$(DRIVER).tmp" "$(DRIVER)"; }
+
+$(SIGNED_DRIVER): $(RAW_DRIVER) $(SIGN_KEY) $(SIGN_CERT)
+	mkdir -p "$(@D)"
+	"$(SIGN_FILE)" sha256 "$(SIGN_KEY)" "$(SIGN_CERT)" "$<" "$@.tmp"
+	mv "$@.tmp" "$@"
+
+.PHONY: load run-dlopen run-wsserver run-encryption
+load:
+	@if [ -d /sys/module/secret_driver ]; then \
+		echo "secret_driver is already loaded."; \
+	elif [ -f "$(DRIVER)" ]; then \
+		insmod "$(DRIVER)"; \
+	else \
+		echo "Missing $(DRIVER). Run make -j first." >&2; exit 1; \
+	fi
+
+# Run from BIN so the launcher and shared libraries resolve their relative paths.
+run: launcher dlopen wsserver encryption
+	cd "$(BIN)" && ./launcher $(ARGS)
+
+run-dlopen: dlopen
+	cd "$(BIN)" && ./dlopen $(ARGS)
+
+run-wsserver: wsserver
+	cd "$(BIN)" && ./wsserver $(ARGS)
+
+run-encryption: encryption
+	cd "$(BIN)" && ./encryption $(ARGS)
 
 clean:
 	rm -rf -- build/bin

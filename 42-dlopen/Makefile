@@ -12,3 +12,7 @@ all: dlopen
 # to the Makefile located in the parent dir
 dlopen mathlib mathlib2 clean:
 	$(MAKE) -C .. $@
+
+.PHONY: run
+run:
+	$(MAKE) -C .. run-dlopen

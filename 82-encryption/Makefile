@@ -12,3 +12,11 @@ main: encryption
 # Delegate build and clean commands to parent Makefile
 encryption module clean:
 	$(MAKE) -C .. $@
+
+.PHONY: run
+run:
+	$(MAKE) -C .. run-encryption
+
+.PHONY: load
+load:
+	$(MAKE) -C .. load

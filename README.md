@@ -58,7 +58,7 @@ under `build/bin/obj`.
 
 Individual targets are available: `make launcher`, `make dlopen`,
 `make wsserver`, `make encryption`, `make mathlib`, and `make mathlib2`.
-The encryption executable is independent and is not registered in the launcher.
+Run a program directly with `make run-dlopen`, `make run-wsserver`, or `make run-encryption`. Pass arguments with `ARGS`, for example `make run-encryption ARGS=\'--encrypt "hello world" "second message"\'`.
 
 Run the existing launcher from its output directory so its relative executable
 and shared-library paths resolve:
@@ -126,21 +126,18 @@ Run from the project root:
 
 ~~~bash
 
+mkdir -p build/signing
 openssl req -new -x509 -newkey rsa:2048 \
-
--keyout compcs410-mok.priv \
-
--outform DER -out compcs410-mok.der \
-
+-keyout build/signing/MOK.priv \
+-outform DER -out build/signing/MOK.der \
 -nodes -days 3650 \
-
 -subj "/CN=COMP.CS.410 local module signing/"
 
-chmod 600 compcs410-mok.priv
+chmod 600 build/signing/MOK.priv
 
 ~~~
 
-Never commit or share compcs410-mok.priv. Each user should create and enroll their own key. The certificate may be shared, but its private key must stay private.
+Never commit or share build/signing/MOK.priv. Each user should create and enroll their own key. The certificate may be shared, but its private key must stay private.
 
 ## 3. Enroll the certificate when Secure Boot enforces module signatures
 
@@ -150,7 +147,7 @@ Check Secure Boot state using your distribution's tool. On shim-based systems wi
 
 mokutil --sb-state
 
-sudo mokutil --import "$PWD/compcs410-mok.der"
+sudo mokutil --import "$PWD/build/signing/MOK.der"
 
 sudo systemctl reboot
 
@@ -160,63 +157,24 @@ At reboot, MOK Manager asks to enroll the certificate. Choose **Enroll MOK**, co
 
 ~~~bash
 
-sudo mokutil --test-key "$PWD/compcs410-mok.der"
+sudo mokutil --test-key "$PWD/build/signing/MOK.der"
 
 ~~~
 
 Skip this step if module signature enforcement is off. If your distribution does not use MOK, follow its documented key-enrollment process.
 
-## 4. Build executable and module
+## 4. Build and load the driver
 
-From project root:
-
-~~~bash
-
-make encryption
-
-make module KDIR="/lib/modules/$(uname -r)/build"
-
-~~~
-
-Executable: build/bin/encryption
-
-Module: build/bin/82-encryption/secret\\\_driver.ko
-
-## 5. Sign and load module
-
-If Secure Boot enforcement requires a signature, sign the final module after every rebuild. The kernel build tree usually provides scripts/sign-file:
+From the project root, run:
 
 ~~~bash
-
-KVER=$(uname -r)
-
-SIGN="/lib/modules/$KVER/build/scripts/sign-file"
-
-MODULE="$PWD/build/bin/82-encryption/secret_driver.ko"
-
-"SIGN" sha256 "PWD/compcs410-mok.priv" "PWD/compcs410-mok.der" "MODULE"
-
+make -j
+sudo make load
 ~~~
 
-Load the module:
+Make builds all programs and the module. When both `build/signing/MOK.priv` and `build/signing/MOK.der` exist, Make signs the module using the kernel build tree's `scripts/sign-file`. Otherwise it reports that local signing was skipped. The module for loading is `build/bin/82-encryption/secret_driver.ko`.
 
-~~~bash
-
-sudo insmod "$MODULE"
-
-grep my_device_driver /proc/devices
-
-~~~
-
-If sign-file is elsewhere, use the copy provided by your distribution's matching kernel development package. If the module is already loaded, unload it before loading a rebuilt copy:
-
-~~~bash
-
-sudo rmmod secret_driver
-
-sudo insmod "$MODULE"
-
-~~~
+The load target skips an already loaded driver. To activate a rebuilt driver, run `sudo rmmod secret_driver` followed by `sudo make load`.
 
 The program creates /dev/secret if missing. If its device numbers are wrong, recreate it as character device major 42, minor 0:
 
