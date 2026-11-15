@@ -1,4 +1,5 @@
 # COMP.CS.410 projects
+
 This repository houses a collection of low-level systems programming and C++ projects developed for COMP.CS.410, focusing on dynamic library loading, networking protocols, Linux kernel module development, and process orchestration.
 
 ## Project Structure
@@ -27,23 +28,28 @@ The project is organized into modular directories under a unified build system m
 │   ├── main.cpp                # CLI utility for key configuration and file encryption
 │   └── Makefile                # Sub-makefile delegating to root
 │
-├── compcs/                     # Process manager & service launcher
-│   ├── processhelpers.h        # Fork, process group, signal handling, & process reaping
-│   └── main.cpp                # Interactive terminal launcher CLI (run, status, kill)
-│
+├── processhelpers.h            # Fork, process group, signal handling, & process reaping
+├── main.cpp                    # Interactive terminal launcher CLI (run, status, kill)
 ├── Makefile                    # Centralized root build system
 └── README.md                   # Project documentation and setup guide
 ```
 
 ## Component breakdown
-### Compcs
+
 ### 42-dlopen
+
 Evaluates complex arithmetic expressions using runtime-loaded shared libraries (libmathlib.so, libmathlib2.so) without static linking.
+
 ### 74-wsserver
+
 Lightweight TCP WebSocket server that streams periodic time frames to connected clients. Includes hand-rolled SHA-1 and Base64 implementations.
+
 ### 82-encryption
+
 Linux kernel character device driver (/dev/secret) implementing a cryptographic pipeline: XOR Cipher $\rightarrow$ SHA-1 Hash $\rightarrow$ Base64 Encoding.
+
 ## Build Compilation
+
 Service manager and launcher utility for orchestrating background services (wsserver) and interactive CLIs.
 
 Build on Linux with GNU Make, a C++20 compiler, and development files for the running kernel:
@@ -58,7 +64,7 @@ under `build/bin/obj`.
 
 Individual targets are available: `make launcher`, `make dlopen`,
 `make wsserver`, `make encryption`, `make mathlib`, and `make mathlib2`.
-Run a program directly with `make run-dlopen`, `make run-wsserver`, or `make run-encryption`. Pass arguments with `ARGS`, for example `make run-encryption ARGS=\'--encrypt "hello world" "second message"\'`.
+Run a program directly with `make run-dlopen`, `make run-wsserver`, or `sudo make run-encryption`. Pass arguments with `ARGS`, for example `sudo make run-encryption ARGS='--encrypt "hello world" "second message"'`.
 
 Run the existing launcher from its output directory so its relative executable
 and shared-library paths resolve:
@@ -67,14 +73,17 @@ and shared-library paths resolve:
 make run
 ```
 
+To run encryption through the launcher, run the launcher with elevated privileges:
+
+```sh
+sudo make run
+```
+
 ## Cleanup
 
 `make clean` removes `build/bin`, including all new build artifacts.
 
-
-
-
-# Running the encryption driver on Linux
+# Building the encryption driver on Linux
 
 These steps target Linux systems with GNU make, a C/C++ toolchain, kernel build headers, and a kernel that supports external modules. Secure Boot signing steps use MOK, available on many shim-based distributions. Other systems may use a different key-enrollment process.
 
@@ -92,7 +101,7 @@ Install your distribution's equivalents of:
 
 Package examples:
 
-~~~bash
+```bash
 
 # Fedora
 
@@ -106,79 +115,66 @@ sudo apt install build-essential libssl-dev mokutil linux-headers-$(uname -r)
 
 sudo pacman -S base-devel openssl mokutil linux-headers
 
-~~~
+```
 
 Check that kernel build files exist:
 
-~~~bash
+```bash
 
 KVER=$(uname -r)
 
 test -e "/lib/modules/$KVER/build" || echo "Install matching kernel headers"
 
-~~~
+```
 
 If headers are missing, install the package matching uname -r, then reboot into that kernel.
 
-## 2. Create a local signing key
+## 2. Create the signing key
 
-Run from the project root:
+Run this once from the project root as your normal user:
 
-~~~bash
+```sh
+make signing-key
+```
 
-mkdir -p build/signing
-openssl req -new -x509 -newkey rsa:2048 \
--keyout build/signing/MOK.priv \
--outform DER -out build/signing/MOK.der \
--nodes -days 3650 \
--subj "/CN=COMP.CS.410 local module signing/"
+Keep `build/signing/MOK.priv` private. The matching public certificate is `build/signing/MOK.der`.
 
-chmod 600 build/signing/MOK.priv
+## 3. Enroll the certificate
 
-~~~
+On a Secure Boot system using MOK, enroll the certificate once per machine. Choose a temporary password when prompted:
 
-Never commit or share build/signing/MOK.priv. Each user should create and enroll their own key. The certificate may be shared, but its private key must stay private.
+```sh
+sudo mokutil --import build/signing/MOK.der
+sudo reboot
+```
 
-## 3. Enroll the certificate when Secure Boot enforces module signatures
+In MOK Manager, select **Enroll MOK**, then **Continue**, then **Yes**. Enter the temporary password and reboot. Return to the project root and confirm enrollment:
 
-Check Secure Boot state using your distribution's tool. On shim-based systems with mokutil:
+```sh
+mokutil --test-key build/signing/MOK.der
+```
 
-~~~bash
+If your system accepts unsigned modules, you can skip steps 2 and 3. Systems using a different trust mechanism should follow their distribution's enrollment instructions.
 
-mokutil --sb-state
+## 4. Build and sign
 
-sudo mokutil --import "$PWD/build/signing/MOK.der"
-
-sudo systemctl reboot
-
-~~~
-
-At reboot, MOK Manager asks to enroll the certificate. Choose **Enroll MOK**, confirm, enter the password set during import, then reboot. Verify:
-
-~~~bash
-
-sudo mokutil --test-key "$PWD/build/signing/MOK.der"
-
-~~~
-
-Skip this step if module signature enforcement is off. If your distribution does not use MOK, follow its documented key-enrollment process.
-
-## 4. Build and load the driver
-
-From the project root, run:
-
-~~~bash
+```sh
 make -j
-sudo make load
-~~~
+```
 
-Make builds all programs and the module. When both `build/signing/MOK.priv` and `build/signing/MOK.der` exist, Make signs the module using the kernel build tree's `scripts/sign-file`. Otherwise it reports that local signing was skipped. The module for loading is `build/bin/82-encryption/secret_driver.ko`.
+Make builds all programs and signs the finished driver when both signing files are present. Reuse the same enrolled pair for later builds.
+
+## 5. Load the driver
+
+```sh
+sudo make load
+```
 
 The load target skips an already loaded driver. To activate a rebuilt driver, run `sudo rmmod secret_driver` followed by `sudo make load`.
 
 The program creates /dev/secret if missing. If its device numbers are wrong, recreate it as character device major 42, minor 0:
 
-~~~bash
+```bash
 
 sudo rm /dev/secret
 
@@ -186,28 +182,16 @@ sudo mknod /dev/secret c 42 0
 
 sudo chmod 666 /dev/secret
 
-~~~
+```
 
-## 6. Set key and encrypt
+## 6. Unload module
 
-~~~bash
-
-sudo build/bin/encryption --setkey 42
-
-sudo build/bin/encryption --encrypt "first message" "second message"
-
-~~~
-
-The key stays in driver memory. It resets when the module unloads or the system reboots. Set it again after each reload.
-
-## 7. Unload module
-
-~~~bash
+```bash
 
 sudo rmmod secret_driver
 
-~~~
-
+```
 
 # AI
+
 This project's documentation, code comments, structural organization, and setup guides were developed, refined, and structured in close collaboration with an AI assistant (Gemini).
