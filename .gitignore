@@ -2,3 +2,5 @@
 
 .vscode/
 build/
+# Local Secure Boot signing private key
+compcs410-mok.priv

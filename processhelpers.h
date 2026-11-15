@@ -11,6 +11,7 @@
 #include <iostream>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
 
 // Represents process definition containing its executable path
 struct Process {
@@ -22,7 +23,7 @@ struct Process {
 namespace ProcessHelpers 
 {
     // Spawns a new child process for a given service or a CLI program
-    pid_t spawn(const std::string& name, const Process& process) {
+    pid_t spawn(const std::string& name, const Process& process, const std::vector<std::string>& arguments) {
         pid_t pid = fork();
 
         if (pid < 0) {
@@ -41,26 +42,21 @@ namespace ProcessHelpers
             // Its children must not inherit that setting.
             std::signal(SIGTTOU, SIG_DFL);
 
+            std::vector<char*> child_argv;
+            child_argv.push_back(const_cast<char*>(process.executable.c_str()));
             if (!process.cli) {
-                // Background services must not read CLI/launcher input.
                 int fd = open("/dev/null", O_RDONLY);
                 if (fd < 0 || dup2(fd, STDIN_FILENO) < 0) {
                     std::perror("service stdin");
                     _exit(127);
                 }
                 close(fd);
-
-                // Launch background service with -b flag
-                execl(process.executable.c_str(),
-                      process.executable.c_str(),
-                      "-b",
-                      static_cast<char*>(nullptr));
-            } else {
-                // Launch interactive CLI normally
-                execl(process.executable.c_str(),
-                      process.executable.c_str(),
-                      static_cast<char*>(nullptr));
+                child_argv.push_back(const_cast<char*>("-b"));
             }
+            for (const auto& argument : arguments)
+                child_argv.push_back(const_cast<char*>(argument.c_str()));
+            child_argv.push_back(nullptr);
+            execv(process.executable.c_str(), child_argv.data());
 
             std::perror("execl");
             _exit(127);
@@ -76,8 +72,9 @@ namespace ProcessHelpers
     }
 
     // Run a process, handing over terminal control if an interactive CLI
-    pid_t run_process(const std::string& name, const Process& process, pid_t launcher_group) {
-        pid_t pid = spawn(name, process);
+    pid_t run_process(const std::string& name, const Process& process, pid_t launcher_group,
+                      const std::vector<std::string>& arguments = {}) {
+        pid_t pid = spawn(name, process, arguments);
         if (pid < 0 || !process.cli) // On failure or spawned background service do not waitpid
             return pid;
 

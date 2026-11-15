@@ -4,6 +4,7 @@
 #include <cstring>
 #include <iostream>
 #include <sstream>
+#include <iomanip>
 #include <string>
 #include <sys/types.h>
 #include <unistd.h>
@@ -15,7 +16,8 @@
 // Registry mapping service and CLI program names to their process defs
 static const std::vector<std::pair<std::string, Process>> PROCESS_REGISTRY = {
     {"dlopen", {"dlopen", true}},
-    {"wsserver", {"wsserver", false}}
+    {"wsserver", {"wsserver", false}},
+    {"encryption", {"encryption", true}}
 };
 
 // Look up a process definition in the registry by name
@@ -54,70 +56,40 @@ int main(int argc, char* argv[]) {
     std::unordered_map<std::string, pid_t> running_services; // Track running services
     pid_t launcher_group = getpgrp();
 
-    // If arguments were given, run the requested processes first
+    // Run one requested program from launcher arguments.
     if (argc > 1) {
         if (std::strcmp(argv[1], "run") != 0 || argc < 3) {
-            std::cerr << "Usage: " << argv[0]
-                      << " [run --all | run <name> [name...]]\n";
+            std::cerr << "Usage: " << argv[0] << " run <program> [arguments...]\n";
             return 1;
         }
 
-        std::vector<std::pair<std::string, const Process*>> requested;
-        if (argc == 3 && std::strcmp(argv[2], "--all") == 0) {
-            // Gather all processes from registry
-            for (const auto& [name, def] : PROCESS_REGISTRY) {
-                requested.emplace_back(name, &def);
-            }
-        }
-        else {
-            // Try getting requested processes from registry by names
-            for (int i = 2; i < argc; ++i) {
-                std::string name = argv[i];
-
-                const Process* process = find_process(name);
-                if (!process) {
-                    std::cerr << "Unknown program: " << name << '\n';
-                    return 1;
-                }
-
-                requested.emplace_back(name, process);
-            }
+        std::string name = argv[2];
+        const Process* process = find_process(name);
+        if (!process) {
+            std::cerr << "Unknown program: " << name << '\n';
+            return 1;
         }
 
-        // Start background services before running any CLI.
-        for (const auto& [name, process] : requested) {
-            if (process->cli)
-                continue; // Skip CLIs in this phase
+        std::vector<std::string> arguments;
+        for (int i = 3; i < argc; ++i)
+            arguments.emplace_back(argv[i]);
 
+        if (process->cli) {
+            if (ProcessHelpers::run_process(name, *process, launcher_group, arguments) < 0) {
+                std::cerr << "Failure running CLI: " << name << '\n';
+                exit_requested = 1;
+            }
+        } else {
             ProcessHelpers::reap_services(running_services);
-
             if (running_services.find(name) != running_services.end()) {
                 std::cout << name << " is already running\n";
-                continue;
-            }
-
-            pid_t pid = ProcessHelpers::run_process(
-                name, *process, launcher_group);
-
-            if (pid < 0) {
-                std::cerr << "Failed running service: " << name << '\n';
-                exit_requested = 1;
-                break;
-            }
-
-            running_services.emplace(name, pid);
-        }
-
-        // Run CLIs sequentially. 
-        if (!exit_requested) {
-            for (const auto& [name, process] : requested) {
-                if (!process->cli)
-                    continue;
-
-                if (ProcessHelpers::run_process(name, *process, launcher_group) < 0) {
-                    std::cerr << "Failure running CLI: " << name << '\n';
+            } else {
+                pid_t pid = ProcessHelpers::run_process(name, *process, launcher_group, arguments);
+                if (pid < 0) {
+                    std::cerr << "Failed running service: " << name << '\n';
                     exit_requested = 1;
-                    break;
+                } else {
+                    running_services.emplace(name, pid);
                 }
             }
         }
@@ -199,76 +171,42 @@ int main(int argc, char* argv[]) {
 
         // Handle 'run' command to start services/interactive CLIs dynamically
         } else if (command == "run") {
-            std::vector<std::pair<std::string, const Process*>> requested;
             std::string name;
-            bool run_failed = false; 
-
-            while (input >> name) {
-                if (name == "--all") {
-                    if (!requested.empty() || (input >> name)) {
-                        std::cout << "Use --all alone\n";
-                        requested.clear();
-                        break;
-                    }
-
-                    for (const auto& [registered_name, definition] : PROCESS_REGISTRY) {
-                        requested.emplace_back(registered_name, &definition);
-                    }
-                    break;
-                }
-
-                const auto* process = find_process(name);
-                if (!process) {
-                    std::cout << "Unknown program: " << name << '\n';
-                    requested.clear();
-                    break;
-                }
-
-                requested.emplace_back(name, process);
+            if (!(input >> std::quoted(name))) {
+                std::cerr << "Usage: run <program> [arguments...]\n";
+                continue;
             }
 
-            if (!requested.empty()) {
-                // Run all services
-                for (const auto& [requested_name, process] : requested) {
-                    if (process->cli)
-                        continue;
+            const Process* process = find_process(name);
+            if (!process) {
+                std::cout << "Unknown program: " << name << '\n';
+                continue;
+            }
 
-                    ProcessHelpers::reap_services(running_services);
+            std::vector<std::string> arguments;
+            std::string argument;
+            while (input >> std::quoted(argument))
+                arguments.push_back(argument);
 
-                    if (running_services.find(requested_name) != running_services.end()) {
-                        std::cout << requested_name << " is already running\n";
-                        continue;
-                    }
-
-                    pid_t pid = ProcessHelpers::run_process(
-                        requested_name, *process, launcher_group);
-
-                    if (pid < 0) {
-                        std::cerr << "Failed running service: "
-                                << requested_name << '\n';
-                        run_failed = true;
-                        break;
-                    }
-
-                    running_services.emplace(requested_name, pid);
+            if (process->cli) {
+                if (ProcessHelpers::run_process(name, *process, launcher_group, arguments) < 0)
+                    std::cerr << "Failure running CLI: " << name << '\n';
+            } else {
+                ProcessHelpers::reap_services(running_services);
+                if (running_services.find(name) != running_services.end()) {
+                    std::cout << name << " is already running\n";
+                    continue;
                 }
 
-                if (run_failed) continue;
-
-                // Run all cli's (waits on each cli)
-                for (const auto& [requested_name, process] : requested) {
-                    if (!process->cli)
-                        continue;
-
-                    if (ProcessHelpers::run_process(requested_name, *process, launcher_group) < 0) {
-                        std::cerr << "Failure running CLI: "
-                                << requested_name << '\n';
-                        break; 
-                    }
+                pid_t pid = ProcessHelpers::run_process(name, *process, launcher_group, arguments);
+                if (pid < 0) {
+                    std::cerr << "Failed running service: " << name << '\n';
+                } else {
+                    running_services.emplace(name, pid);
                 }
             }
         } else {
-            std::cout << "Commands: run <names>, run --all, "
+            std::cout << "Commands: run <program> [arguments...], "
                          "status, kill <service>, quit\n";
         }
     }
