@@ -91,6 +91,26 @@ else
 endif
 	@cmp -s "$(MODULE_SOURCE)" "$(DRIVER)" || { cp "$(MODULE_SOURCE)" "$(DRIVER).tmp" && mv "$(DRIVER).tmp" "$(DRIVER)"; }
 
+# Generate the local module signing pair once, before running make -j.
+.PHONY: signing-key
+signing-key:
+	@set -eu; umask 077; \
+	if [ -s "$(SIGN_KEY)" ] && [ -s "$(SIGN_CERT)" ]; then \
+		echo "Reusing $(SIGN_KEY) and $(SIGN_CERT)."; \
+	elif [ -e "$(SIGN_KEY)" ] || [ -e "$(SIGN_CERT)" ]; then \
+		echo "Incomplete signing pair. Restore the matching file or move existing files aside before retrying." >&2; exit 1; \
+	else \
+		mkdir -p "$(dir $(SIGN_KEY))"; \
+		tmp=$$(mktemp -d "$(dir $(SIGN_KEY)).mok.XXXXXX"); \
+		trap 'rm -f "$$tmp/key" "$$tmp/cert"; rmdir "$$tmp"' EXIT; \
+		openssl req -new -x509 -newkey rsa:2048 -sha256 -nodes -days 3650 \
+			-subj "/CN=COMP.CS.410 local module signing/" \
+			-keyout "$$tmp/key" -outform DER -out "$$tmp/cert"; \
+		ln -T "$$tmp/key" "$(SIGN_KEY)"; \
+		ln -T "$$tmp/cert" "$(SIGN_CERT)"; \
+	fi
+	@echo "For MOK enrollment, run sudo mokutil --import $(SIGN_CERT), then reboot and select Enroll MOK."
+
 $(SIGNED_DRIVER): $(RAW_DRIVER) $(SIGN_KEY) $(SIGN_CERT)
 	mkdir -p "$(@D)"
 	"$(SIGN_FILE)" sha256 "$(SIGN_KEY)" "$(SIGN_CERT)" "$<" "$@.tmp"
