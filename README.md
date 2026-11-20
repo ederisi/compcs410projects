@@ -64,75 +64,80 @@ under `build/bin/obj`.
 
 Individual targets are available: `make launcher`, `make dlopen`,
 `make wsserver`, `make encryption`, `make mathlib`, and `make mathlib2`.
-Run a program directly with `make run-dlopen`, `make run-wsserver`, or `sudo make run-encryption`. Pass arguments with `ARGS`, for example `sudo make run-encryption ARGS='--encrypt "hello world" "second message"'`.
 
-Run the existing launcher from its output directory so its relative executable
-and shared-library paths resolve:
+## Running the Programs (dlopen, wsserver, and encryption)
+
+Run the Make commands from the project root. The run targets start the programs from `build/bin` so relative paths to shared libraries, scripts, and logs resolve there.
+
+Start the launcher with `make run`. Use `sudo make run` if the encryption client needs elevated privileges to access `/dev/secret`.
+
+### 42-dlopen (Math Expression & Script Evaluator)
+
+Run directly:
 
 ```sh
-make run
+make run-dlopen
 ```
 
-To run encryption through the launcher, run the launcher with elevated privileges:
+Or at the launcher prompt:
+
+```text
+launcher> run dlopen
+```
+
+At the calculator prompt (`Enter your input:`), type an expression or enter a `.txt` script path:
+
+- Arithmetic and power: `2 + 3 * 4`, `(10 - 4) / 2`, `2 ^ 8`
+- Unary math functions: `sqrt(16)`, `sin(0)`, `cos(0)`, `tan(0)`
+- Script execution: enter a path such as `commands.txt`. Relative paths start in `build/bin`.
+
+Press Ctrl+C to exit.
+
+### 74-wsserver (WebSocket Time Server)
+
+The server listens on port 8080 (`0.0.0.0:8080`) and sends the current system time as a WebSocket text frame every 3 seconds after a client completes the RFC 6455 handshake.
+
+Run in the foreground with logs on stdout and stderr. Press Ctrl+C to stop it.
 
 ```sh
-sudo make run
+make run-wsserver
+```
+
+Redirect stdout and stderr to `build/bin/ws_server.log` with `-b`:
+
+```sh
+make run-wsserver ARGS=-b
+```
+
+To manage it as a background service, use the launcher:
+
+```text
+launcher> run wsserver
+launcher> status
+launcher> kill wsserver
+```
+
+### 82-encryption (`/dev/secret` Kernel Driver Client)
+
+Load the `secret_driver` kernel module first. See [Building the encryption driver on Linux](#building-the-encryption-driver-on-linux).
+
+Set the XOR key (a 32-bit integer stored in the driver), then process one or more messages. The driver applies XOR, SHA-1, and Base64 in that order, and the client prints the results.
+
+```sh
+sudo make run-encryption ARGS='--setkey 42'
+sudo make run-encryption ARGS='--encrypt "first message" "second message"'
+```
+
+Or at the launcher prompt:
+
+```text
+launcher> run encryption --setkey 42
+launcher> run encryption --encrypt "first message" "second message"
 ```
 
 ## Cleanup
 
 `make clean` removes `build/bin`, including all new build artifacts.
-
-
-# Running the Programs (dlopen, wsserver, and encryption)
-After building with make -j, run the executables from build/bin so relative paths to shared libraries (libmathlib.so, libmathlib2.so) and logs (ws_server.log) resolve as expected.
-
-## 42-dlopen (Math Expression & Script Evaluator)
-Run from `build/bin` so dlopen can load `libmathlib.so` and `libmathlib2.so`:
-```sh
-cd build/bin
-./42-dlopen
-```
-Inside the interactive prompt (Enter your input:), type expressions directly or pass a .txt script path:
-
-Arithmetic & power: 2 + 3 * 4, (10 - 4) / 2, 2 ^ 8
-
-Unary math functions: sqrt(16), sin(0), cos(0), tan(0)
-
-Script file execution: Provide any input containing a .txt path (for example, commands.txt) to run calculations from that text file.
-
-Exit: Press Ctrl+D (EOF).
-
-## 74-wsserver (WebSocket Time Server)
-
-The server listens on port 8080 (0.0.0.0:8080) and sends the current system time as a WebSocket text frame every 3 seconds after a client completes the RFC 6455 handshake.
-
-Run in the foreground (logs to stdout/stderr; stop with Ctrl+C):
-```sh
-cd build/bin
-./74-wsserver
-```
-Run with background logging (`-b` redirects stdout and stderr to `build/bin/ws_server.log`):
-```sh
-cd build/bin
-./74-wsserver -b
-```
-
-You can also start wsserver as a managed background service via `./launcher` (`run wsserver`, `status`, `kill wsserver`).
-
-## 82-encryption (`/dev/secret` Kernel Driver Client)
-
-Make sure the `secret_driver` kernel module is loaded first (see Running the Encryption Driver on Linux below). Then run from the project root:
-
-Set the XOR key (stored as a 32-bit integer in the driver):
-
-```sh
-sudo build/bin/encryption --setkey 42
-```
-Encrypt one or more messages (processed through XOR -> SHA-1 -> Base64 in kernel space and printed to stdout):
-```sh
-sudo build/bin/encryption --encrypt "first message" "second message"
-```
 
 # Building the encryption driver on Linux
 
