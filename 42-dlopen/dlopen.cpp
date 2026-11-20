@@ -4,14 +4,20 @@
 #include <sstream>
 #include <cmath>
 #include <fstream>
+#include <filesystem>
 
 // Function pointer signatures for dynamically loading math functions
 typedef double (*BinaryMathFunc)(double, double);
 typedef double (*UnaryMathFunc)(double);
 
-// Paths to shared libraries (with binary and unary operations)
-static constexpr std::string_view BINARY_MATH_LIB = "./libmathlib.so";
-static constexpr std::string_view UNARY_MATH_LIB = "./libmathlib2.so";
+// Load the bundled math libraries beside the executable.
+static constexpr std::string_view BINARY_MATH_LIB = "libmathlib.so";
+static constexpr std::string_view UNARY_MATH_LIB = "libmathlib2.so";
+
+static std::filesystem::path math_library_path(std::string_view name) {
+    static const auto bin_dir = std::filesystem::read_symlink("/proc/self/exe").parent_path();
+    return bin_dir / name;
+}
 
 // Dynamically load and calculate binary operations
 double DLOPEN::calculate(double a, double b, Operand operand) {
@@ -38,7 +44,7 @@ double DLOPEN::calculate(double a, double b, Operand operand) {
     }
 
     // Open shared library using dlopen with lazy symbol resolution
-    void* handle = dlopen(std::string(BINARY_MATH_LIB).c_str(), RTLD_LAZY);
+    void* handle = dlopen(math_library_path(BINARY_MATH_LIB).c_str(), RTLD_LAZY);
     if (!handle) {
         std::cerr <<"Error running library: " << dlerror() << "\n";
         return NAN; 
@@ -89,7 +95,7 @@ double DLOPEN::calculate(double a, Operand operand) {
     }
 
     // Open unary shared library handle
-    void* handle = dlopen(std::string(UNARY_MATH_LIB).c_str(), RTLD_LAZY);
+    void* handle = dlopen(math_library_path(UNARY_MATH_LIB).c_str(), RTLD_LAZY);
     if (!handle) {
         std::cerr << "Error running library: " << dlerror() << "\n";
         return NAN; 
@@ -152,8 +158,16 @@ bool DLOPEN::execute_script(const std::string& filepath) {
             }
         }
         
-        // Load specifiedd dynamic library for current script line
-        void* handle = dlopen(lib_name.c_str(), RTLD_LAZY);
+        // Resolve bundled library names, including the ./ form used by existing scripts.
+        std::filesystem::path lib_path(lib_name);
+        const auto parent = lib_path.parent_path();
+        const auto filename = lib_path.filename().string();
+        if ((parent.empty() || parent == ".") &&
+            (filename == BINARY_MATH_LIB || filename == UNARY_MATH_LIB)) {
+            lib_path = math_library_path(filename);
+        }
+
+        void* handle = dlopen(lib_path.c_str(), RTLD_LAZY);
         if (!handle) {
             std::cerr << "Library load failed (" << lib_name << "): " << dlerror() << "\n";
             continue;

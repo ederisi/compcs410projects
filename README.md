@@ -67,7 +67,7 @@ Individual targets are available: `make launcher`, `make dlopen`,
 
 ## Running the Programs (dlopen, wsserver, and encryption)
 
-Run the Make commands from the project root. The run targets start the programs from `build/bin` so relative paths to shared libraries, scripts, and logs resolve there.
+Run the Make commands from the project root. Executables and shared libraries are built under `build/bin`. Make and the launcher start the calculator in `42-dlopen/` and the WebSocket server in `74-wsserver/`.
 
 Start the launcher with `make run`. Use `sudo make run` if the encryption client needs elevated privileges to access `/dev/secret`.
 
@@ -89,7 +89,7 @@ At the calculator prompt (`Enter your input:`), type an expression or enter a `.
 
 - Arithmetic and power: `2 + 3 * 4`, `(10 - 4) / 2`, `2 ^ 8`
 - Unary math functions: `sqrt(16)`, `sin(0)`, `cos(0)`, `tan(0)`
-- Script execution: enter a path such as `commands.txt`. Relative paths start in `build/bin`.
+- Script execution: enter `calculate.txt` to run the bundled example. Relative script paths start in `42-dlopen/`. The calculator loads the math libraries from `build/bin`.
 
 Press Ctrl+C to exit.
 
@@ -103,13 +103,13 @@ Run in the foreground with logs on stdout and stderr. Press Ctrl+C to stop it.
 make run-wsserver
 ```
 
-Redirect stdout and stderr to `build/bin/ws_server.log` with `-b`:
+Redirect stdout and stderr to `74-wsserver/ws_server.log` with `-b`:
 
 ```sh
 make run-wsserver ARGS=-b
 ```
 
-To manage it as a background service, use the launcher:
+The launcher starts the server as a background service and enables the same log file:
 
 ```text
 launcher> run wsserver

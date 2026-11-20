@@ -11,7 +11,6 @@
 #include <vector>
 #include <thread>
 #include <iostream>
-#include <filesystem>
 #include <fcntl.h>
 #include <signal.h>
 #include "websocket.h" 
@@ -21,14 +20,10 @@
 #define SA struct sockaddr
 #define MSG_INTERVAL 3
 
-// Enables background daemon mode by redireccting stdout and stderr
-// to a local 'ws_server.log' file next to the executable
+// Redirect stdout and stderr to ws_server.log in the working directory.
 void enableLogging() {
-    // Resolve the directory of the currently running executable
-    std::filesystem::path exe_dir = std::filesystem::canonical("/proc/self/exe").parent_path();
-    std::filesystem::path log_path = exe_dir / "ws_server.log";
-
-    int log_fd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    const char* log_path = "ws_server.log";
+    int log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (log_fd < 0) {
         std::cerr << "Failed to open log file: " << log_path << "\n";
         return;

@@ -126,15 +126,15 @@ load:
 		echo "Missing $(DRIVER). Run make -j first." >&2; exit 1; \
 	fi
 
-# Run from BIN so the launcher and shared libraries resolve their relative paths.
+# Run each program from its working directory. Executables stay in BIN.
 run: launcher dlopen wsserver encryption
 	cd "$(BIN)" && ./launcher $(ARGS)
 
 run-dlopen: dlopen
-	cd "$(BIN)" && ./dlopen $(ARGS)
+	cd 42-dlopen && "$(abspath $(BIN)/dlopen)" $(ARGS)
 
 run-wsserver: wsserver
-	cd "$(BIN)" && ./wsserver $(ARGS)
+	cd 74-wsserver && "$(abspath $(BIN)/wsserver)" $(ARGS)
 
 run-encryption: encryption
 	cd "$(BIN)" && ./encryption $(ARGS)

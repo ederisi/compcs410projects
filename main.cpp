@@ -15,9 +15,9 @@
 
 // Registry mapping service and CLI program names to their process defs
 static const std::vector<std::pair<std::string, Process>> PROCESS_REGISTRY = {
-    {"dlopen", {"dlopen", true}},
-    {"wsserver", {"wsserver", false}},
-    {"encryption", {"encryption", true}}
+    {"dlopen", {"dlopen", true, "../../42-dlopen"}},
+    {"wsserver", {"wsserver", false, "../../74-wsserver"}},
+    {"encryption", {"encryption", true, "."}}
 };
 
 // Look up a process definition in the registry by name

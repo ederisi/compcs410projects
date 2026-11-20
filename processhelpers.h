@@ -8,15 +8,17 @@
 #include <csignal>
 #include <cstdio>
 #include <fcntl.h>
+#include <filesystem>
 #include <iostream>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
 
-// Represents process definition containing its executable path
+// Process paths are relative to the launcher executable directory.
 struct Process {
     std::string executable;
     bool cli;
+    std::string working_directory;
 };
 
 // Namespace containing helper utils
@@ -24,6 +26,15 @@ namespace ProcessHelpers
 {
     // Spawns a new child process for a given service or a CLI program
     pid_t spawn(const std::string& name, const Process& process, const std::vector<std::string>& arguments) {
+        std::error_code path_error;
+        const auto bin_dir = std::filesystem::read_symlink("/proc/self/exe", path_error).parent_path();
+        if (path_error) {
+            std::cerr << "Cannot locate launcher executable: " << path_error.message() << '\n';
+            return -1;
+        }
+        const auto executable = (bin_dir / process.executable).string();
+        const auto working_directory = bin_dir / process.working_directory;
+
         pid_t pid = fork();
 
         if (pid < 0) {
@@ -42,8 +53,13 @@ namespace ProcessHelpers
             // Its children must not inherit that setting.
             std::signal(SIGTTOU, SIG_DFL);
 
+            if (chdir(working_directory.c_str()) < 0) {
+                std::perror("chdir");
+                _exit(127);
+            }
+
             std::vector<char*> child_argv;
-            child_argv.push_back(const_cast<char*>(process.executable.c_str()));
+            child_argv.push_back(const_cast<char*>(executable.c_str()));
             if (!process.cli) {
                 int fd = open("/dev/null", O_RDONLY);
                 if (fd < 0 || dup2(fd, STDIN_FILENO) < 0) {
@@ -56,9 +72,9 @@ namespace ProcessHelpers
             for (const auto& argument : arguments)
                 child_argv.push_back(const_cast<char*>(argument.c_str()));
             child_argv.push_back(nullptr);
-            execv(process.executable.c_str(), child_argv.data());
+            execv(executable.c_str(), child_argv.data());
 
-            std::perror("execl");
+            std::perror("execv");
             _exit(127);
         }
 

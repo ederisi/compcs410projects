@@ -1,6 +1,6 @@
 # Format: librarypath function name arg1 arg2
-./libmathlib.so add 1 1
-./libmathlib.so multiply 5 4
-./libmathlib.so power 2 3
-./libmathlib2.so sqrt 3
-./libmathlib2.so sin -1.1
+./libmathlib.so mathlib_add 1 1
+./libmathlib.so mathlib_multiply 5 4
+./libmathlib.so mathlib_power 2 3
+./libmathlib2.so mathlib_sqrt 3
+./libmathlib2.so mathlib_sin -1.1
