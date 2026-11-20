@@ -83,6 +83,57 @@ sudo make run
 
 `make clean` removes `build/bin`, including all new build artifacts.
 
+
+# Running the Programs (dlopen, wsserver, and encryption)
+After building with make -j, run the executables from build/bin so relative paths to shared libraries (libmathlib.so, libmathlib2.so) and logs (ws_server.log) resolve as expected.
+
+## 42-dlopen (Math Expression & Script Evaluator)
+Run from `build/bin` so dlopen can load `libmathlib.so` and `libmathlib2.so`:
+```sh
+cd build/bin
+./42-dlopen
+```
+Inside the interactive prompt (Enter your input:), type expressions directly or pass a .txt script path:
+
+Arithmetic & power: 2 + 3 * 4, (10 - 4) / 2, 2 ^ 8
+
+Unary math functions: sqrt(16), sin(0), cos(0), tan(0)
+
+Script file execution: Provide any input containing a .txt path (for example, commands.txt) to run calculations from that text file.
+
+Exit: Press Ctrl+D (EOF).
+
+## 74-wsserver (WebSocket Time Server)
+
+The server listens on port 8080 (0.0.0.0:8080) and sends the current system time as a WebSocket text frame every 3 seconds after a client completes the RFC 6455 handshake.
+
+Run in the foreground (logs to stdout/stderr; stop with Ctrl+C):
+```sh
+cd build/bin
+./74-wsserver
+```
+Run with background logging (`-b` redirects stdout and stderr to `build/bin/ws_server.log`):
+```sh
+cd build/bin
+./74-wsserver -b
+```
+
+You can also start wsserver as a managed background service via `./launcher` (`run wsserver`, `status`, `kill wsserver`).
+
+## 82-encryption (`/dev/secret` Kernel Driver Client)
+
+Make sure the `secret_driver` kernel module is loaded first (see Running the Encryption Driver on Linux below). Then run from the project root:
+
+Set the XOR key (stored as a 32-bit integer in the driver):
+
+```sh
+sudo build/bin/encryption --setkey 42
+```
+Encrypt one or more messages (processed through XOR -> SHA-1 -> Base64 in kernel space and printed to stdout):
+```sh
+sudo build/bin/encryption --encrypt "first message" "second message"
+```
+
 # Building the encryption driver on Linux
 
 These steps target Linux systems with GNU make, a C/C++ toolchain, kernel build headers, and a kernel that supports external modules. Secure Boot signing steps use MOK, available on many shim-based distributions. Other systems may use a different key-enrollment process.
